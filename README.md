@@ -1,2 +1,2 @@
 # GiftElf
-Gift Exchange application where you can add your gifts and links to them.
+| Fun application to display my 2023 christmas list using Tailwind CSS and Firebase.
