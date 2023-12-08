@@ -8,11 +8,11 @@ module.exports = {
         'inter': "Inter",
       },
       colors:{
-        'white': '#fcfcfc'
+        'white': '#fcfcfc',
+        'bright-white': '#ffffff',
+        'lighter-black': '#222222',
+        'accent-red': '#FB4D54',
       },
-      backgroundImage:{
-        'christmasTrees': "url('./dist/img/Background-Image.png')",
-      }
     },
   },
   plugins: [],

@@ -30,3 +30,22 @@ body{
   background-size: cover;
   background-position: center;
 }
+.slideIn{
+  opacity: 0;
+}
+.gif_animation{
+  background-image: url('../dist/img/snowAnimation.gif');
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+.inside_gif{
+  background-image: linear-gradient(to bottom, transparent, #FB4D54);
+}
+.christmasListContainer{
+  overscroll-behavior-inline: contain;
+  scroll-snap-type: mandatory;
+  scroll-padding-inline: 1rem;
+}
+.christmasListContainer > *{
+  scroll-snap-align: center;
+}
