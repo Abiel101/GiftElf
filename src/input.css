@@ -43,9 +43,10 @@ body{
 }
 .christmasListContainer{
   overscroll-behavior-inline: contain;
-  scroll-snap-type: mandatory;
-  scroll-padding-inline: 1rem;
+  scroll-snap-type: x mandatory;
+  padding-left: 5rem;
+  padding-right: 5rem;
 }
-.christmasListContainer > *{
+/* .christmasListContainer > *{
   scroll-snap-align: center;
-}
+} */

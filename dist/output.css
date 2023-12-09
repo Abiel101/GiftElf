@@ -635,6 +635,10 @@ video {
   height: 100vh;
 }
 
+.h-1{
+  height: 0.25rem;
+}
+
 .w-1{
   width: 0.25rem;
 }
@@ -675,6 +679,14 @@ video {
   --tw-scale-x: 1.25;
   --tw-scale-y: 1.25;
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
+.snap-x{
+  scroll-snap-type: x var(--tw-scroll-snap-strictness);
+}
+
+.snap-center{
+  scroll-snap-align: center;
 }
 
 .grid-flow-col{
@@ -755,16 +767,6 @@ video {
   border-color: rgb(252 252 252 / var(--tw-border-opacity));
 }
 
-.bg-\[\#222222\]{
-  --tw-bg-opacity: 1;
-  background-color: rgb(34 34 34 / var(--tw-bg-opacity));
-}
-
-.bg-\[\#FB4D54\]{
-  --tw-bg-opacity: 1;
-  background-color: rgb(251 77 84 / var(--tw-bg-opacity));
-}
-
 .bg-\[\#f6f6f6\]{
   --tw-bg-opacity: 1;
   background-color: rgb(246 246 246 / var(--tw-bg-opacity));
@@ -775,11 +777,6 @@ video {
   background-color: rgb(255 255 255 / var(--tw-bg-opacity));
 }
 
-.bg-white{
-  --tw-bg-opacity: 1;
-  background-color: rgb(252 252 252 / var(--tw-bg-opacity));
-}
-
 .bg-accent-red{
   --tw-bg-opacity: 1;
   background-color: rgb(251 77 84 / var(--tw-bg-opacity));
@@ -788,6 +785,11 @@ video {
 .bg-lighter-black{
   --tw-bg-opacity: 1;
   background-color: rgb(34 34 34 / var(--tw-bg-opacity));
+}
+
+.bg-white{
+  --tw-bg-opacity: 1;
+  background-color: rgb(252 252 252 / var(--tw-bg-opacity));
 }
 
 .p-10{
@@ -854,7 +856,7 @@ video {
   font-weight: 400;
 }
 
-.text-\[\#FB4D54\]{
+.text-accent-red{
   --tw-text-opacity: 1;
   color: rgb(251 77 84 / var(--tw-text-opacity));
 }
@@ -862,11 +864,6 @@ video {
 .text-white{
   --tw-text-opacity: 1;
   color: rgb(252 252 252 / var(--tw-text-opacity));
-}
-
-.text-accent-red{
-  --tw-text-opacity: 1;
-  color: rgb(251 77 84 / var(--tw-text-opacity));
 }
 
 .opacity-0{
@@ -938,13 +935,14 @@ body{
 
 .christmasListContainer{
   overscroll-behavior-inline: contain;
-  scroll-snap-type: mandatory;
-  scroll-padding-inline: 1rem;
+  scroll-snap-type: x mandatory;
+  padding-left: 5rem;
+  padding-right: 5rem;
 }
 
-.christmasListContainer > *{
+/* .christmasListContainer > *{
   scroll-snap-align: center;
-}
+} */
 
 .hover\:scale-110:hover{
   --tw-scale-x: 1.1;
