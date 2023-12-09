@@ -24,7 +24,7 @@ let item = [
   },
   {
     title: 'Logitech Keyboard',
-    image: 'img/logitechKeyboard.jpg',
+    image: 'img/LogitechKeyboard.jpg',
     category: 'Tech',
     price: '$199',
     link: 'https://www.logitechg.com/en-gb/products/gaming-keyboards/pro-x-tkl-wireless-keyboard.html?irclickid=3Mo0lNXVJxyNUjfx-FXaGQhtUkFSmgT%3ACz-2wY0&irgwc=1'
@@ -38,7 +38,7 @@ let item = [
   },
   {
     title: 'Pro Core MagSafe',
-    image: 'img/',
+    image: 'img/PhoneHolderToLaptop.jpg',
     category: 'Tech',
     price: '$29',
     link: 'https://rollingsquare.com/collections/edge%C2%AE-pro/products/edgepro-core?utm_source=ig&utm_medium=Instagram_Feed&utm_campaign=%5BAdkings%5D+SALES+%7C+COLD+%7C+US+%7C+OX+%7C+Control+%2B+DTC+%7C+17.10.23.&utm_term=Broad+%7C+US+%7C+CONTROL+2+%7C+14.09.&utm_content=CONTROL+%7C+post+id%3A+574205951591605+%7C+14.09.&fbadid=120200544218570704&fbclid=PAAaZBl4k3y2d5VYqQlj4sEUbGKSc7YJ1jCuuwOICBh-eir3qQeBl1KpEuXwo_aem_AQzGhY9l6CH9UIV0vHMdmE2_yUWzmwxRgftj6WtIeCg0HnCSez0onFeh5nDzu4-xm1yJb4EmpT3iREAaJaDC2c0y&campaign_id=120200544218860704&ad_id=120200544218570704&variant=44836783358271'
@@ -166,20 +166,22 @@ for (let i = 0; i < item.length; i++) {
 
 function appendNewChristmasListItem(listItem){
   christmasList.innerHTML += `
-    <div class="p-10 pt-5 pb-5 w-70 h-96 bg-[#ffffff] shadow-lg rounded-2xl flex flex-col items-center relative snap-center sm:snap-start">
+    <div class="w-72 h-4/6 pt-5 sm:h-3/6 sm:hover:scale-110 transition-all bg-[#ffffff] shadow-lg rounded-2xl flex flex-col items-center justify-around relative snap-center sm:snap-start">
       <div class="relative w-56 h-56 border-2 border-black rounded-2xl overflow-hidden flex items-center justify-center">
-        <img class="scale-125 hover:scale-110 transition-all duration-75" src="${listItem.image}">
+        <img class="scale-125 transition-all duration-75" src="${listItem.image}">
       </div>
-      <div class="relative w-full pt-3">
-        <div class="flex items-center gap-3">
-          <p class="text-sm">${listItem.category}</p>
-          <div class="w-6 h-[2px] bg-accent-red"></div>
+      <div class="w-full pl-10 h-1/2 flex flex-col justify-between pb-5">
+        <div class="relative w-full pt-3">
+          <div class="flex items-center gap-3">
+            <p class="text-sm">${listItem.category}</p>
+            <div class="w-6 h-[2px] bg-accent-red"></div>
+          </div>
+          <h4 class="text-2xl font-bold">${listItem.title}</h4>
         </div>
-        <h4 class="text-2xl font-bold">${listItem.title}</h4>
-      </div>
-      <div class="w-full flex items-end">
-        <p class="mr-auto text-2xl text-accent-red font-bold">${listItem.price}</p>
-        <a class="p-6 hover:p-8 transition-all bg-lighter-black hover:bg-accent-red text-white rounded-ss-3xl rounded-br-lg absolute right-0 bottom-0" href="${listItem.link}"><i class="fa-solid fa-link"></i></a>
+        <div class="w-full flex items-end -bottom-10">
+          <p class="mr-auto text-3xl sm:text-2xl text-accent-red font-bold">${listItem.price}</p>
+          <a class="p-8 sm:p-6 sm:hover:p-8 transition-all bg-accent-red sm:bg-lighter-black sm:hover:bg-accent-red text-white rounded-ss-3xl rounded-br-lg absolute right-0 bottom-0" href="${listItem.link}"><i class="fa-solid fa-link text-xl sm:text-lg"></i></a>
+        </div>
       </div>
     </div>
   `;

@@ -44,7 +44,7 @@ body{
 .christmasListContainer{
   overscroll-behavior-inline: contain;
   scroll-snap-type: x mandatory;
-  padding-left: 5rem;
+  padding-left: 20rem;
   padding-right: 5rem;
 }
 /* .christmasListContainer > *{
