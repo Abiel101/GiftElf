@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gift Elf</title>
+
+    <link rel="stylesheet" href="output.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+  </head>
+  <body id="body" class="bg-accent-red overflow-hidden">
+  <!-- <body id="body" class="bg-accent-red"> -->
+    <div id="intro" class="w-full h-screen flex items-center justify-center flex-col text-center text-white absolute z-10">
+      <div class="flex flex-col items-center justify-center">
+        <div class="font-jetBrainsMono flex text-5xl mb-4">
+          <span class="intro-text"><p id="letter-g" class="relative">G</p></span>
+          <span id="span-divider" class="w-1 h-full bg-white mx-2"></span>
+          <span class="intro-text"><p id="letter-e" class="relative">E</p></span>
+        </div>
+        <div class="text-3xl font-inter font-extralight overflow-hidden">
+          <h1 id="giftElf-title" class="relative top-8">Gift Elf</h1>
+        </div>
+      </div>
+      <div class="absolute bottom-0 w-full max-w-sm overflow-hidden z-10">
+        <img id="christmasTree" class="w-full" src="img/ChristmasTree.png" alt="ChristmasTree">
+      </div>
+    </div>
+    <!-- Snow GIF -->
+    <div class="gif_animation absolute z-0 w-full h-full">
+      <div class="inside_gif w-full h-full"></div>
+    </div>
+    <!-- currently opacity 0 -->
+    <header class="w-full h-screen flex flex-col items-center justify-center relative z-10">
+      <div class="max-w-md flex items-center justify-center flex-col text-center mb-20">
+        <div id="header_image" class="slideIn image-me rounded-full overflow-hidden w-60 h-60 sm:w-80 sm:h-80 border-4 border-white hover:border-dotted mb-5"></div>
+        <div>
+          <h2 id="header_title" class="slideIn font-inter font-normal text-2xl text-white">Abiel's</h2>
+          <h3 id="header_subtitle" class="slideIn font-inter font-bold text-3xl text-white">Christmas List</h3>
+        </div>
+      </div>
+      <div id="arrowContainer" class="slideIn w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-full opacity-0">
+        <a class="w-full h-full flex items-center justify-center" href="#christmasList"><i id="arrow" class="fa-solid fa-arrow-down relative"></i></a>
+      </div>
+    </header>
+    <main class="bg-accent-red">
+      <div class=" w-full h-screen bg-[#f6f6f6] rounded-3xl flex items-center justify-center flex-col sm:flex-row">
+        <div id="christmasList" class="christmasListContainer w-full h-full grid grid-flow-col items-center gap-10 overflow-x-auto scroll-smooth">
+      <!-- <div id="christmasList" class="christmasListContainer w-full h-screen bg-[#f6f6f6] rounded-3xl sm:rounded-ss-full flex items-center justify-center flex-col sm:flex-row gap-10 overflow-x-auto scroll-smooth"></div> -->
+      <div class="p-10 pt-5 pb-5 w-72 h-96 bg-[#ffffff] shadow-lg rounded-2xl  flex-col items-center relative hidden">
+        <div class="relative w-56 h-56 rounded-2xl border-2 border-black shadow-lg overflow-hidden flex items-center justify-center">
+          <img class="scale-125 hover:scale-110 transition-all duration-75" src="img/techkit.png">
+        </div>
+        <div class="relative w-full pt-3">
+          <div class="mb-2 flex items-center gap-3">
+            <p class="text-sm">${listItem.category}</p>
+            <div class="w-6 h-[2px] bg-accent-red"></div>
+          </div>
+          <h4 class="text-2xl font-bold">${listItem.title}</h4>
+        </div>
+        <div class="w-full flex items-end">
+          <p class="mr-auto text-2xl text-accent-red font-bold">${listItem.price}</p>
+          <a class="p-6 hover:p-8 transition-all bg-lighter-black hover:bg-accent-red text-white rounded-ss-3xl rounded-br-lg absolute right-0 bottom-0" href="${listItem.link}"><i class="fa-solid fa-link"></i></a>
+        </div>
+      </div>
+        </div>
+      </div>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.3/gsap.min.js"></script>
+    <script src="javascript/introAnimation.js" type="module"></script>
+    <script src="javascript/headerAnimation.js" type="module"></script>
+    <script src="javascript/christmasList.js"></script>
+  </body>
+</html>
