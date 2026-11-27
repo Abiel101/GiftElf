@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import type { Session } from "@supabase/supabase-js"
 
 import { AuthPanel } from "@/components/auth-panel"
@@ -10,14 +11,20 @@ import { supabase } from "@/lib/supabase"
 
 export function App() {
   return (
-    <BrandShell>
+    <BrowserRouter>
       <ConnectionGate />
-    </BrandShell>
+    </BrowserRouter>
   )
 }
 
 function ConnectionGate() {
-  if (!supabase) return <SupabaseSetup />
+  if (!supabase) {
+    return (
+      <BrandShell>
+        <SupabaseSetup />
+      </BrandShell>
+    )
+  }
 
   return <AuthenticatedApp client={supabase} />
 }
@@ -82,33 +89,56 @@ function AuthenticatedApp({ client }: AuthenticatedAppProps) {
     }
   }
 
-  return (
-    <div className="space-y-5">
-      {authError && (
-        <p
-          aria-live="polite"
-          className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-800"
-        >
-          {authError}
-        </p>
-      )}
-      {isLoading ? (
+  const errorBanner = authError && (
+    <p
+      aria-live="polite"
+      className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-800"
+    >
+      {authError}
+    </p>
+  )
+
+  if (isLoading) {
+    return (
+      <BrandShell>
         <div
           aria-live="polite"
           className="mx-auto max-w-xl rounded-2xl bg-white p-8 text-center text-sm text-muted-foreground shadow-lg"
         >
           Preparing your family space...
         </div>
-      ) : session ? (
-        <FamilyDashboard
-          client={client}
-          onSignOut={signOut}
-          user={session.user}
-        />
-      ) : (
-        <AuthPanel client={client} />
-      )}
-    </div>
+      </BrandShell>
+    )
+  }
+
+  if (!session) {
+    return (
+      <BrandShell>
+        <div className="space-y-5">
+          {errorBanner}
+          <AuthPanel client={client} />
+        </div>
+      </BrandShell>
+    )
+  }
+
+  const dashboard = (
+    <FamilyDashboard client={client} onSignOut={signOut} user={session.user} />
+  )
+
+  return (
+    <BrandShell variant="app">
+      <div className="space-y-5">
+        {errorBanner}
+        <Routes>
+          <Route path="/family" element={dashboard} />
+          <Route path="/list" element={dashboard} />
+          <Route path="/list/:ownerId" element={dashboard} />
+          <Route path="/team-ups" element={dashboard} />
+          <Route path="*" element={<Navigate to="/family" replace />} />
+        </Routes>
+      </div>
+    </BrandShell>
   )
 }
 

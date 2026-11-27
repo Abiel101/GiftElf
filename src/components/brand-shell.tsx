@@ -3,6 +3,7 @@ import { Sparkles } from "lucide-react"
 
 type BrandShellProps = {
   children: ReactNode
+  variant?: "landing" | "app"
 }
 
 function ElfMascot({ className = "" }: { className?: string }) {
@@ -182,7 +183,29 @@ function GiftBox({ className = "" }: { className?: string }) {
   )
 }
 
-export function BrandShell({ children }: BrandShellProps) {
+export function BrandShell({ children, variant = "landing" }: BrandShellProps) {
+  return variant === "app" ? (
+    <AppShell>{children}</AppShell>
+  ) : (
+    <LandingShell>{children}</LandingShell>
+  )
+}
+
+function AppShell({ children }: { children: ReactNode }) {
+  return (
+    <main className="auth-background relative min-h-dvh">
+      <div
+        aria-hidden="true"
+        className="snow-overlay pointer-events-none absolute inset-0 z-0"
+      />
+      <div className="relative z-10 mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+        {children}
+      </div>
+    </main>
+  )
+}
+
+function LandingShell({ children }: { children: ReactNode }) {
   const [introComplete, setIntroComplete] = useState(false)
 
   function finishIntro(event: AnimationEvent<HTMLDivElement>) {
