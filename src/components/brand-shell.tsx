@@ -87,7 +87,7 @@ function LandingShell({ children }: { children: ReactNode }) {
   const [introComplete, setIntroComplete] = useState(false)
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setIntroComplete(true), 3600)
+    const timer = window.setTimeout(() => setIntroComplete(true), 3900)
     return () => window.clearTimeout(timer)
   }, [])
 
