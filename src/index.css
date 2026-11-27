@@ -1,0 +1,531 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700;900&family=JetBrains+Mono:wght@300;500;700&display=swap");
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --color-accent-red: #fb4d54;
+  --color-lighter-black: #222222;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #222222;
+  --card: #ffffff;
+  --card-foreground: #222222;
+  --popover: #ffffff;
+  --popover-foreground: #222222;
+  --primary: #fb4d54;
+  --primary-foreground: #ffffff;
+  --secondary: #f6f6f6;
+  --secondary-foreground: #222222;
+  --muted: #f6f6f6;
+  --muted-foreground: #666666;
+  --accent: #f6f6f6;
+  --accent-foreground: #222222;
+  --destructive: #fb4d54;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #fb4d54;
+  --radius: 0.75rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply scroll-smooth font-sans;
+    scrollbar-width: none;
+  }
+
+  html::-webkit-scrollbar {
+    display: none;
+  }
+
+  body {
+    @apply m-0 min-w-80 bg-accent-red text-foreground antialiased;
+    background-image: url("/img/Background-Image.png");
+    background-repeat: repeat;
+  }
+}
+
+#root {
+  min-height: 100vh;
+}
+
+body:has(.intro-overlay) {
+  overflow: hidden;
+}
+
+.snow-overlay {
+  background-image:
+    radial-gradient(
+      1.5px 1.5px at 30px 45px,
+      rgba(255, 255, 255, 0.8) 98%,
+      transparent
+    ),
+    radial-gradient(
+      2px 2px at 130px 95px,
+      rgba(255, 255, 255, 0.65) 98%,
+      transparent
+    ),
+    radial-gradient(
+      1px 1px at 75px 155px,
+      rgba(255, 255, 255, 0.75) 98%,
+      transparent
+    ),
+    radial-gradient(
+      1.5px 1.5px at 115px 80px,
+      rgba(255, 255, 255, 0.75) 98%,
+      transparent
+    ),
+    radial-gradient(
+      1px 1px at 55px 175px,
+      rgba(255, 255, 255, 0.7) 98%,
+      transparent
+    ),
+    radial-gradient(
+      1.25px 1.25px at 165px 45px,
+      rgba(255, 255, 255, 0.68) 98%,
+      transparent
+    );
+  background-position:
+    10px 0,
+    80px -100px,
+    35px -70px,
+    120px -130px,
+    -40px -40px,
+    150px -160px;
+  background-repeat: repeat;
+  background-size:
+    240px 300px,
+    320px 380px,
+    190px 250px,
+    180px 230px,
+    150px 210px,
+    260px 320px;
+  animation: snowfall 28s linear infinite;
+  opacity: 0.7;
+}
+
+.holiday-light-wire {
+  stroke: rgba(255, 236, 183, 0.78);
+  stroke-linecap: round;
+  stroke-width: 2.25;
+}
+
+.holiday-light-stem {
+  stroke: rgba(255, 236, 183, 0.78);
+  stroke-linecap: round;
+  stroke-width: 2.25;
+}
+
+.holiday-light {
+  animation: holiday-light-twinkle 2.6s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.holiday-light:nth-of-type(3n + 1) {
+  animation-delay: -1.3s;
+}
+
+.holiday-light:nth-of-type(3n + 2) {
+  animation-delay: -0.65s;
+}
+
+.holiday-light--gold {
+  color: #ffe18b;
+}
+
+.holiday-light--mint {
+  color: #8be5be;
+}
+
+.holiday-light--coral {
+  color: #ffb1a6;
+}
+
+.holiday-light-glow {
+  fill: currentColor;
+  opacity: 0.4;
+}
+
+.holiday-light-bulb {
+  fill: currentColor;
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+.brand-background {
+  background-color: #e94753;
+  background-image: linear-gradient(
+    to bottom right,
+    #e94753 0%,
+    #cf3342 58%,
+    #a82035 100%
+  );
+  background-position: right center;
+  background-repeat: no-repeat;
+  background-size: 50% 100%;
+}
+
+@media (max-width: 1023px) {
+  .brand-background {
+    background-image: none;
+  }
+}
+
+.brand-panel {
+  background-color: #1f8f6b;
+  background-image:
+    linear-gradient(145deg, rgba(31, 143, 107, 0.76), rgba(24, 119, 87, 0.86)),
+    url("/img/Background-Image.png");
+  background-repeat: no-repeat, repeat;
+  background-size:
+    cover,
+    220px auto;
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - 10px),
+    91.67% 100%,
+    83.33% calc(100% - 10px),
+    75% 100%,
+    66.67% calc(100% - 10px),
+    58.33% 100%,
+    50% calc(100% - 10px),
+    41.67% 100%,
+    33.33% calc(100% - 10px),
+    25% 100%,
+    16.67% calc(100% - 10px),
+    8.33% 100%,
+    0 calc(100% - 10px)
+  );
+}
+
+@media (min-width: 1024px) {
+  .brand-panel {
+    clip-path: polygon(
+      0 0,
+      calc(100% - 16px) 0,
+      100% 6.25%,
+      calc(100% - 16px) 12.5%,
+      100% 18.75%,
+      calc(100% - 16px) 25%,
+      100% 31.25%,
+      calc(100% - 16px) 37.5%,
+      100% 43.75%,
+      calc(100% - 16px) 50%,
+      100% 56.25%,
+      calc(100% - 16px) 62.5%,
+      100% 68.75%,
+      calc(100% - 16px) 75%,
+      100% 81.25%,
+      calc(100% - 16px) 87.5%,
+      100% 93.75%,
+      calc(100% - 16px) 100%,
+      0 100%
+    );
+  }
+}
+
+.auth-background {
+  background: linear-gradient(
+    to bottom right,
+    #e94753 0%,
+    #cf3342 58%,
+    #a82035 100%
+  );
+}
+
+.auth-flip-card {
+  perspective: 1400px;
+}
+
+.auth-flip-inner {
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform 760ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.auth-flip-card.is-flipped .auth-flip-inner {
+  transform: rotateY(180deg);
+}
+
+.auth-card-face {
+  grid-area: 1 / 1;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.auth-card-back {
+  transform: rotateY(180deg);
+}
+
+.intro-overlay {
+  background:
+    radial-gradient(
+      ellipse at 82% 100%,
+      rgba(31, 143, 107, 0.48),
+      transparent 42%
+    ),
+    linear-gradient(145deg, #e94753 0%, #cf3342 58%, #a82035 100%);
+  animation: intro-exit 0.45s ease-in 4.35s forwards;
+}
+
+.intro-stage {
+  --intro-tree-size: clamp(9rem, 26vw, 21rem);
+  --intro-elf-size: clamp(5rem, 15vw, 11rem);
+}
+
+.intro-lockup {
+  animation: intro-lockup-enter 0.65s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s both;
+}
+
+.intro-sparkle {
+  animation: sparkle-in 0.5s ease-out 0.65s both;
+}
+
+.elf-mascot-enter {
+  animation: elf-float 4s ease-in-out infinite;
+}
+
+.intro-tree {
+  width: var(--intro-tree-size);
+  transform-origin: bottom center;
+  animation: intro-tree-arrive 0.7s ease-out 0.1s both;
+}
+
+.intro-walker {
+  width: var(--intro-elf-size);
+  animation: intro-elf-walk 3.2s cubic-bezier(0.45, 0, 0.35, 1) 0.15s both;
+}
+
+.intro-walking-elf {
+  filter: drop-shadow(0 10px 14px rgba(80, 0, 8, 0.24));
+  animation: intro-elf-bounce 0.32s ease-in-out 0.15s 8 alternate both;
+}
+
+.intro-elf-leg {
+  transform-box: fill-box;
+  transform-origin: 50% 10%;
+}
+
+.intro-elf-leg--back {
+  animation: intro-leg-back 0.32s ease-in-out 0.15s 8 alternate both;
+}
+
+.intro-elf-leg--front {
+  animation: intro-leg-front 0.32s ease-in-out 0.15s 8 alternate both;
+}
+
+.intro-carried-present {
+  animation: intro-present-release 0.2s ease-out 2.8s forwards;
+}
+
+.intro-delivered-present {
+  bottom: clamp(1rem, 4dvh, 3rem);
+  left: calc(100vw - 4vw - var(--intro-tree-size) - clamp(2.5rem, 5vw, 4rem));
+  width: clamp(2.5rem, 5vw, 4rem);
+  filter: drop-shadow(0 6px 9px rgba(80, 0, 8, 0.26));
+  animation: intro-present-land 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 2.8s both;
+}
+
+.gift-carousel {
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-inline: contain;
+  padding-left: clamp(1.5rem, 18vw, 20rem);
+  padding-right: 1.5rem;
+}
+
+@keyframes sparkle-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4) rotate(-35deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes intro-lockup-enter {
+  from {
+    opacity: 0;
+    transform: translateY(1.25rem) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes elf-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-7px) rotate(1deg);
+  }
+}
+
+@keyframes snowfall {
+  to {
+    background-position:
+      10px 100dvh,
+      80px calc(100dvh - 100px),
+      35px calc(100dvh - 70px),
+      120px calc(100dvh - 130px),
+      -40px calc(100dvh - 40px),
+      150px calc(100dvh - 160px);
+  }
+}
+
+@keyframes holiday-light-twinkle {
+  from {
+    opacity: 0.68;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes intro-tree-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes intro-elf-walk {
+  0% {
+    transform: translateX(-140%);
+  }
+  72%,
+  100% {
+    transform: translateX(
+      calc(100vw - 12vw - var(--intro-tree-size) - var(--intro-elf-size) - 12px)
+    );
+  }
+}
+
+@keyframes intro-elf-bounce {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes intro-leg-back {
+  from {
+    transform: rotate(12deg);
+  }
+  to {
+    transform: rotate(-12deg);
+  }
+}
+
+@keyframes intro-leg-front {
+  from {
+    transform: rotate(-12deg);
+  }
+  to {
+    transform: rotate(12deg);
+  }
+}
+
+@keyframes intro-present-release {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes intro-present-land {
+  0% {
+    opacity: 0;
+    transform: translateY(-2rem) scale(0.75);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(0.25rem) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes intro-exit {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-overlay,
+  .intro-lockup,
+  .intro-sparkle,
+  .intro-tree,
+  .intro-walker,
+  .intro-walking-elf,
+  .intro-elf-leg,
+  .intro-carried-present,
+  .intro-delivered-present,
+  .elf-mascot-enter,
+  .auth-flip-inner,
+  .snow-overlay,
+  .holiday-light {
+    animation-duration: 1ms;
+    animation-delay: 0ms;
+    animation-iteration-count: 1;
+    transition-duration: 1ms;
+  }
+
+  .intro-carried-present {
+    opacity: 0;
+  }
+
+  .intro-delivered-present {
+    opacity: 1;
+    transform: none;
+  }
+}

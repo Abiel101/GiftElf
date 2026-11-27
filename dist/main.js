@@ -1,1 +1,0 @@
-// Here we are only adding functionality to things on both pages that act the same way like button clicks using query selector
