@@ -15,6 +15,7 @@ import {
   Users,
 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
+import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom"
 import type { User } from "@supabase/supabase-js"
 
 import { Button } from "@/components/ui/button"
@@ -274,8 +275,15 @@ export function FamilyDashboard({
   const [inviteName, setInviteName] = useState("")
   const [inviteEmail, setInviteEmail] = useState("")
   const [giftForm, setGiftForm] = useState<GiftForm>(blankGift)
-  const [view, setView] = useState<DashboardView>("family")
-  const [listOwnerId, setListOwnerId] = useState(user.id)
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const { ownerId } = useParams()
+  const view: DashboardView = pathname.startsWith("/list")
+    ? "list"
+    : pathname.startsWith("/team-ups")
+      ? "team-ups"
+      : "family"
+  const listOwnerId = ownerId ?? user.id
   const [category, setCategory] = useState<GiftCategory>("want")
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all")
   const [proofUrls, setProofUrls] = useState<Record<string, string>>({})
@@ -815,8 +823,7 @@ export function FamilyDashboard({
   })
 
   function openList(ownerId: string) {
-    setListOwnerId(ownerId)
-    setView("list")
+    navigate(ownerId === user.id ? "/list" : `/list/${ownerId}`)
     setCategory("want")
     setPriceFilter("all")
   }
@@ -859,7 +866,7 @@ export function FamilyDashboard({
         <div className="flex gap-2">
           <Button
             className="rounded-lg"
-            onClick={() => setView("family")}
+            onClick={() => navigate("/family")}
             variant="outline"
           >
             Profile
@@ -884,27 +891,25 @@ export function FamilyDashboard({
       )}
 
       <nav aria-label="Gift Elf sections" className="flex flex-wrap gap-2">
-        <button
-          className={navClass(view === "family")}
-          onClick={() => setView("family")}
-          type="button"
-        >
+        <NavLink className={({ isActive }) => navClass(isActive)} to="/family">
           Family
-        </button>
-        <button
-          className={navClass(view === "list" && listOwnerId === user.id)}
-          onClick={() => openList(user.id)}
-          type="button"
+        </NavLink>
+        <NavLink
+          className={() => navClass(view === "list" && listOwnerId === user.id)}
+          onClick={() => {
+            setCategory("want")
+            setPriceFilter("all")
+          }}
+          to="/list"
         >
           My List
-        </button>
-        <button
-          className={navClass(view === "team-ups")}
-          onClick={() => setView("team-ups")}
-          type="button"
+        </NavLink>
+        <NavLink
+          className={({ isActive }) => navClass(isActive)}
+          to="/team-ups"
         >
           Team-ups
-        </button>
+        </NavLink>
       </nav>
 
       {view === "family" && (
@@ -1211,7 +1216,7 @@ export function FamilyDashboard({
             {listOwnerId !== user.id && (
               <Button
                 className="rounded-lg"
-                onClick={() => setView("family")}
+                onClick={() => navigate("/family")}
                 variant="outline"
               >
                 Back to family
