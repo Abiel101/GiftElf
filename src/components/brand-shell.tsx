@@ -1,4 +1,4 @@
-import { useState, type AnimationEvent, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Sparkles } from "lucide-react"
 
 type BrandShellProps = {
@@ -61,128 +61,6 @@ function ElfMascot({ className = "" }: { className?: string }) {
   )
 }
 
-function GiftArtwork() {
-  return (
-    <g>
-      <rect x="8" y="24" width="48" height="34" rx="4" fill="#FF4F58" />
-      <path d="M28 24h8v34h-8z" fill="#FFF7EF" />
-      <rect x="4" y="18" width="56" height="12" rx="4" fill="#FFC94D" />
-      <path
-        d="M32 18C17 18 17 7 25 7c5 0 8 5 8 11Zm1 0c1-11 13-15 18-9 4 5-4 9-18 9Z"
-        fill="#FFE18B"
-        stroke="#FFC94D"
-        strokeWidth="2"
-      />
-      <circle cx="32" cy="21" r="3" fill="#F5B73B" />
-    </g>
-  )
-}
-
-function WalkingElf({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      viewBox="0 0 200 240"
-    >
-      <ellipse cx="99" cy="228" rx="55" ry="8" fill="#551925" opacity=".22" />
-      <g className="intro-elf-leg intro-elf-leg--back">
-        <path
-          d="m81 157-8 39"
-          stroke="#176F53"
-          strokeLinecap="round"
-          strokeWidth="17"
-        />
-        <path
-          d="M75 191c-11 0-20 6-20 13 0 4 4 7 9 7h19c7 0 10-5 7-11-3-5-8-8-15-9Z"
-          fill="#A33F3C"
-        />
-      </g>
-      <g className="intro-elf-leg intro-elf-leg--front">
-        <path
-          d="m112 159 5 39"
-          stroke="#238A65"
-          strokeLinecap="round"
-          strokeWidth="17"
-        />
-        <path
-          d="M117 193c10 0 19 6 19 13 0 4-4 7-9 7h-19c-7 0-10-5-7-11 3-5 8-8 16-9Z"
-          fill="#A33F3C"
-        />
-      </g>
-      <path
-        d="M62 103c21-13 51-14 72 0l12 61c-29 17-70 16-108 0l13-48c2-6 5-10 11-13Z"
-        fill="#238A65"
-      />
-      <path
-        d="m66 112-17 8-11 22 17 11 19-16m49-24 18 7 13 21-16 12-21-15"
-        fill="#3BB78F"
-        stroke="#176F53"
-        strokeLinejoin="round"
-        strokeWidth="4"
-      />
-      <path
-        d="m77 101 18 17 19-17"
-        fill="#FFF7EF"
-        stroke="#FFF7EF"
-        strokeLinejoin="round"
-        strokeWidth="4"
-      />
-      <path
-        d="M73 151c15 7 35 8 51 1"
-        stroke="#FFC94D"
-        strokeLinecap="round"
-        strokeWidth="7"
-      />
-      <circle cx="96" cy="68" r="35" fill="#F2B986" />
-      <path
-        d="M61 65c2-28 20-45 43-44 21 1 36 18 37 43-24-9-53-9-80 1Z"
-        fill="#1F8F6B"
-      />
-      <path
-        d="M111 27c13-23 36-25 51-14-14 2-20 11-19 27-9-7-19-11-32-13Z"
-        fill="#3BB78F"
-        stroke="#FFF7EF"
-        strokeLinejoin="round"
-        strokeWidth="3"
-      />
-      <circle cx="161" cy="12" r="7" fill="#FFC94D" />
-      <path
-        d="M72 73c4-4 8-4 12 0m22 0c4-4 8-4 12 0"
-        stroke="#50352B"
-        strokeLinecap="round"
-        strokeWidth="4"
-      />
-      <path
-        d="M89 89c5 5 11 5 16 0"
-        stroke="#A33F3C"
-        strokeLinecap="round"
-        strokeWidth="4"
-      />
-      <g
-        className="intro-carried-present"
-        transform="translate(124 116) scale(.7)"
-      >
-        <GiftArtwork />
-      </g>
-    </svg>
-  )
-}
-
-function GiftBox({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      viewBox="0 0 64 64"
-    >
-      <GiftArtwork />
-    </svg>
-  )
-}
-
 export function BrandShell({ children, variant = "landing" }: BrandShellProps) {
   return variant === "app" ? (
     <AppShell>{children}</AppShell>
@@ -208,14 +86,10 @@ function AppShell({ children }: { children: ReactNode }) {
 function LandingShell({ children }: { children: ReactNode }) {
   const [introComplete, setIntroComplete] = useState(false)
 
-  function finishIntro(event: AnimationEvent<HTMLDivElement>) {
-    if (
-      event.target === event.currentTarget &&
-      event.animationName === "intro-exit"
-    ) {
-      setIntroComplete(true)
-    }
-  }
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIntroComplete(true), 3600)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   return (
     <main className="brand-background relative min-h-dvh overflow-hidden">
@@ -223,7 +97,6 @@ function LandingShell({ children }: { children: ReactNode }) {
         <div
           aria-hidden="true"
           className="intro-overlay fixed inset-0 z-30 overflow-hidden text-white"
-          onAnimationEnd={finishIntro}
         >
           <div className="intro-stage absolute inset-0 overflow-hidden">
             <div className="absolute inset-x-0 top-[8dvh] z-10 flex justify-center">
@@ -234,15 +107,16 @@ function LandingShell({ children }: { children: ReactNode }) {
                 <Sparkles className="intro-sparkle size-6 text-[#ffe18b]" />
               </div>
             </div>
-            <img
-              className="intro-tree absolute right-[8vw] bottom-0 z-10 h-auto"
-              src="/img/ChristmasTree.png"
-              alt=""
-            />
-            <div className="intro-walker absolute bottom-[4dvh] left-[4vw] z-20">
-              <WalkingElf className="intro-walking-elf block h-auto w-full" />
+            <div className="intro-tree absolute bottom-0 left-1/2 z-10 -translate-x-1/2">
+              {[1, 2, 3].map((tier) => (
+                <img
+                  alt=""
+                  className={`intro-tree-tier intro-tree-tier--${tier}`}
+                  key={tier}
+                  src="/img/ChristmasTree.png"
+                />
+              ))}
             </div>
-            <GiftBox className="intro-delivered-present absolute z-20" />
           </div>
         </div>
       )}
