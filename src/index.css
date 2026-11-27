@@ -301,12 +301,12 @@ body:has(.intro-overlay) {
       transparent 42%
     ),
     linear-gradient(145deg, #e94753 0%, #cf3342 58%, #a82035 100%);
-  animation: intro-exit 0.45s ease-in 4.35s forwards;
+  pointer-events: none;
+  animation: intro-exit 0.45s ease-in 3.1s forwards;
 }
 
 .intro-stage {
-  --intro-tree-size: clamp(9rem, 26vw, 21rem);
-  --intro-elf-size: clamp(5rem, 15vw, 11rem);
+  --intro-tree-size: clamp(11rem, 30vw, 22rem);
 }
 
 .intro-lockup {
@@ -323,43 +323,30 @@ body:has(.intro-overlay) {
 
 .intro-tree {
   width: var(--intro-tree-size);
-  transform-origin: bottom center;
-  animation: intro-tree-arrive 0.7s ease-out 0.1s both;
 }
 
-.intro-walker {
-  width: var(--intro-elf-size);
-  animation: intro-elf-walk 3.2s cubic-bezier(0.45, 0, 0.35, 1) 0.15s both;
+.intro-tree-tier {
+  display: block;
+  width: 100%;
+  height: auto;
+  animation: intro-tier-rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
-.intro-walking-elf {
-  filter: drop-shadow(0 10px 14px rgba(80, 0, 8, 0.24));
-  animation: intro-elf-bounce 0.32s ease-in-out 0.15s 8 alternate both;
+.intro-tree-tier--1 {
+  clip-path: inset(0 0 66% 0);
+  animation-delay: 0.9s;
 }
 
-.intro-elf-leg {
-  transform-box: fill-box;
-  transform-origin: 50% 10%;
+.intro-tree-tier--2 {
+  margin-top: -100%;
+  clip-path: inset(34% 0 33% 0);
+  animation-delay: 0.6s;
 }
 
-.intro-elf-leg--back {
-  animation: intro-leg-back 0.32s ease-in-out 0.15s 8 alternate both;
-}
-
-.intro-elf-leg--front {
-  animation: intro-leg-front 0.32s ease-in-out 0.15s 8 alternate both;
-}
-
-.intro-carried-present {
-  animation: intro-present-release 0.2s ease-out 2.8s forwards;
-}
-
-.intro-delivered-present {
-  bottom: clamp(1rem, 4dvh, 3rem);
-  left: calc(100vw - 4vw - var(--intro-tree-size) - clamp(2.5rem, 5vw, 4rem));
-  width: clamp(2.5rem, 5vw, 4rem);
-  filter: drop-shadow(0 6px 9px rgba(80, 0, 8, 0.26));
-  animation: intro-present-land 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 2.8s both;
+.intro-tree-tier--3 {
+  margin-top: -100%;
+  clip-path: inset(67% 0 0 0);
+  animation-delay: 0.3s;
 }
 
 .gift-carousel {
@@ -422,74 +409,14 @@ body:has(.intro-overlay) {
   }
 }
 
-@keyframes intro-tree-arrive {
+@keyframes intro-tier-rise {
   from {
     opacity: 0;
-    transform: translateY(0.75rem) scale(0.96);
+    transform: translateY(6rem);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes intro-elf-walk {
-  0% {
-    transform: translateX(-140%);
-  }
-  72%,
-  100% {
-    transform: translateX(
-      calc(100vw - 12vw - var(--intro-tree-size) - var(--intro-elf-size) - 12px)
-    );
-  }
-}
-
-@keyframes intro-elf-bounce {
-  from {
     transform: translateY(0);
-  }
-  to {
-    transform: translateY(-4px);
-  }
-}
-
-@keyframes intro-leg-back {
-  from {
-    transform: rotate(12deg);
-  }
-  to {
-    transform: rotate(-12deg);
-  }
-}
-
-@keyframes intro-leg-front {
-  from {
-    transform: rotate(-12deg);
-  }
-  to {
-    transform: rotate(12deg);
-  }
-}
-
-@keyframes intro-present-release {
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes intro-present-land {
-  0% {
-    opacity: 0;
-    transform: translateY(-2rem) scale(0.75);
-  }
-  75% {
-    opacity: 1;
-    transform: translateY(0.25rem) scale(1.05);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
@@ -504,12 +431,7 @@ body:has(.intro-overlay) {
   .intro-overlay,
   .intro-lockup,
   .intro-sparkle,
-  .intro-tree,
-  .intro-walker,
-  .intro-walking-elf,
-  .intro-elf-leg,
-  .intro-carried-present,
-  .intro-delivered-present,
+  .intro-tree-tier,
   .elf-mascot-enter,
   .auth-flip-inner,
   .snow-overlay,
@@ -519,13 +441,30 @@ body:has(.intro-overlay) {
     animation-iteration-count: 1;
     transition-duration: 1ms;
   }
+}
 
-  .intro-carried-present {
-    opacity: 0;
-  }
+.family-ornament-icon {
+  border: 3px solid #1c2b24;
+  box-shadow: 3px 3px 0 #1c2b24;
+  image-rendering: pixelated;
+  transition: transform 0.12s steps(2);
+}
 
-  .intro-delivered-present {
-    opacity: 1;
-    transform: none;
-  }
+.family-ornament:hover .family-ornament-icon,
+.family-ornament:focus-visible .family-ornament-icon {
+  transform: translateY(-3px);
+}
+
+.family-ornament-name {
+  background: #fff;
+  border: 2px solid #1c2b24;
+  padding: 0 0.35rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #1c2b24;
+}
+
+.family-tree-topper {
+  animation: holiday-light-twinkle 1.2s steps(2) infinite alternate;
 }

@@ -173,12 +173,23 @@ function AuthFace({
   )
 }
 
+// Supabase returns OAuth failures in the redirect URL; surface them.
+function readOAuthError() {
+  const url = new URL(window.location.href)
+  const hash = new URLSearchParams(url.hash.replace(/^#/, ""))
+  return (
+    url.searchParams.get("error_description") ??
+    hash.get("error_description") ??
+    ""
+  )
+}
+
 export function AuthPanel({ client }: AuthPanelProps) {
   const [isSignUp, setIsSignUp] = useState(false)
   const [displayName, setDisplayName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [errorMessage, setErrorMessage] = useState("")
+  const [errorMessage, setErrorMessage] = useState(readOAuthError)
   const [notice, setNotice] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 

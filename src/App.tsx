@@ -131,11 +131,12 @@ function AuthenticatedApp({ client }: AuthenticatedAppProps) {
       <div className="space-y-5">
         {errorBanner}
         <Routes>
+          <Route path="/tree" element={dashboard} />
           <Route path="/family" element={dashboard} />
           <Route path="/list" element={dashboard} />
           <Route path="/list/:ownerId" element={dashboard} />
           <Route path="/team-ups" element={dashboard} />
-          <Route path="*" element={<Navigate to="/family" replace />} />
+          <Route path="*" element={<Navigate to="/tree" replace />} />
         </Routes>
       </div>
     </BrandShell>

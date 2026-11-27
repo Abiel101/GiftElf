@@ -18,6 +18,7 @@ import { QRCodeSVG } from "qrcode.react"
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom"
 import type { User } from "@supabase/supabase-js"
 
+import { FamilyTree } from "@/components/family-tree"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { gifts as originalWishList } from "@/data/gifts"
@@ -45,7 +46,7 @@ type FamilyDetails = {
   teamUps: TeamUpRow[]
   teamUpMembers: TeamUpMemberRow[]
 }
-type DashboardView = "family" | "list" | "team-ups"
+type DashboardView = "tree" | "family" | "list" | "team-ups"
 type PriceFilter = "all" | "under25" | "25to50" | "50to100" | "100plus"
 type GiftForm = {
   title: string
@@ -282,7 +283,9 @@ export function FamilyDashboard({
     ? "list"
     : pathname.startsWith("/team-ups")
       ? "team-ups"
-      : "family"
+      : pathname.startsWith("/family")
+        ? "family"
+        : "tree"
   const listOwnerId = ownerId ?? user.id
   const [category, setCategory] = useState<GiftCategory>("want")
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all")
@@ -891,6 +894,9 @@ export function FamilyDashboard({
       )}
 
       <nav aria-label="Gift Elf sections" className="flex flex-wrap gap-2">
+        <NavLink className={({ isActive }) => navClass(isActive)} to="/tree">
+          Tree
+        </NavLink>
         <NavLink className={({ isActive }) => navClass(isActive)} to="/family">
           Family
         </NavLink>
@@ -911,6 +917,37 @@ export function FamilyDashboard({
           Team-ups
         </NavLink>
       </nav>
+
+      {view === "tree" && (
+        <section className="rounded-2xl bg-white/95 p-5 shadow-lg">
+          <h2 className="text-center text-xl font-bold text-lighter-black">
+            {activeFamily ? activeFamily.name : "Your family tree"}
+          </h2>
+          {details.members.length > 0 ? (
+            <>
+              <p className="mb-2 text-center text-sm text-muted-foreground">
+                Pick an ornament to see that person&rsquo;s wish list.
+              </p>
+              <FamilyTree
+                currentUserId={user.id}
+                members={details.members}
+                onSelect={openList}
+              />
+            </>
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {isLoading
+                ? "Decorating the tree..."
+                : "Create or join a family to hang your ornaments."}{" "}
+              {!isLoading && (
+                <NavLink className="font-bold underline" to="/family">
+                  Go to Family
+                </NavLink>
+              )}
+            </p>
+          )}
+        </section>
+      )}
 
       {view === "family" && (
         <>
