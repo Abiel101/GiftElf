@@ -7,12 +7,14 @@ import {
 } from "react"
 import {
   Check,
+  Camera,
   Copy,
   ExternalLink,
   Gift,
   ImagePlus,
   Pencil,
   Plus,
+  RefreshCw,
   Trash2,
   Users,
 } from "lucide-react"
@@ -21,16 +23,19 @@ import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom"
 import type { User } from "@supabase/supabase-js"
 
 import { FamilyTree } from "@/components/family-tree"
+import { InviteScanner } from "@/components/invite-scanner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { gifts as originalWishList } from "@/data/gifts"
 import type {
+  AppTheme,
   AvatarIcon,
   Database,
   GiftCategory,
   TreeTheme,
 } from "@/lib/database.types"
 import { fetchLinkPreview } from "@/lib/link-preview"
+import { notifyError, notifyInfo, notifySuccess } from "@/lib/notifications"
 import { ORNAMENT_COLORS, ORNAMENT_ICONS, TREE_THEMES } from "@/lib/tree-theme"
 import type { GiftElfSupabaseClient } from "@/lib/supabase"
 
@@ -88,6 +93,14 @@ const priceFilters: { value: PriceFilter; label: string }[] = [
   { value: "25to50", label: "$25–50" },
   { value: "50to100", label: "$50–100" },
   { value: "100plus", label: "$100+" },
+]
+const appThemes: { value: AppTheme; label: string; color: string }[] = [
+  { value: "family", label: "Match family", color: "#2f9e78" },
+  { value: "classic", label: "Classic", color: "#c52d3a" },
+  { value: "tokyo-night", label: "Tokyo Night", color: "#24283b" },
+  { value: "mist", label: "Mist", color: "#b8cfd6" },
+  { value: "amber", label: "Amber", color: "#e5a331" },
+  { value: "cyberpunk", label: "Cyberpunk", color: "#7c3aed" },
 ]
 const blankGift: GiftForm = {
   title: "",
@@ -284,11 +297,14 @@ export function FamilyDashboard({
   const [thingsTheyLike, setThingsTheyLike] = useState("")
   const [birthYear, setBirthYear] = useState("")
   const [shareAge, setShareAge] = useState(false)
+  const [appTheme, setAppTheme] = useState<AppTheme>("family")
+  const [isSavingTheme, setIsSavingTheme] = useState(false)
   const [familyName, setFamilyName] = useState("")
   const [familyYear, setFamilyYear] = useState(String(new Date().getFullYear()))
   const [inviteCode, setInviteCode] = useState(
     () => new URLSearchParams(window.location.search).get("join") ?? ""
   )
+  const [scanningInvite, setScanningInvite] = useState(false)
   const [avatarColor, setAvatarColor] = useState(ORNAMENT_COLORS[0])
   const [avatarIcon, setAvatarIcon] = useState<AvatarIcon>("gift")
   const [editingGiftId, setEditingGiftId] = useState("")
@@ -315,10 +331,10 @@ export function FamilyDashboard({
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [pendingId, setPendingId] = useState("")
-  const [errorMessage, setErrorMessage] = useState("")
-  const [notice, setNotice] = useState("")
 
   const activeFamily = families.find((family) => family.id === activeFamilyId)
+  const canDeleteFamily =
+    details.members.length === 1 && details.members[0]?.id === user.id
   const memberById = useMemo(
     () => new Map(details.members.map((member) => [member.id, member])),
     [details.members]
@@ -384,7 +400,7 @@ export function FamilyDashboard({
         .maybeSingle(),
       client
         .from("profile_private")
-        .select("birth_year,share_age")
+        .select("birth_year,share_age,app_theme")
         .eq("user_id", user.id)
         .maybeSingle(),
       fetchFamilySummaries(client, user.id),
@@ -402,6 +418,7 @@ export function FamilyDashboard({
         setThingsTheyLike(profileResult.data?.things_they_like.join(", ") ?? "")
         setBirthYear(privateResult.data?.birth_year?.toString() ?? "")
         setShareAge(privateResult.data?.share_age ?? false)
+        setAppTheme(privateResult.data?.app_theme ?? "family")
         setFamilies(nextFamilies)
         setActiveFamilyId((current) =>
           nextFamilies.some((family) => family.id === current)
@@ -410,7 +427,7 @@ export function FamilyDashboard({
         )
       })
       .catch((error: unknown) => {
-        if (active) setErrorMessage(messageFromError(error))
+        if (active) notifyError(messageFromError(error))
       })
       .finally(() => {
         if (active) setIsLoading(false)
@@ -430,7 +447,7 @@ export function FamilyDashboard({
         if (active) setDetails(nextDetails)
       })
       .catch((error: unknown) => {
-        if (active) setErrorMessage(messageFromError(error))
+        if (active) notifyError(messageFromError(error))
       })
     return () => {
       active = false
@@ -444,6 +461,19 @@ export function FamilyDashboard({
       .on(
         "postgres_changes",
         {
+          event: "UPDATE",
+          schema: "public",
+          table: "families",
+          filter: `id=eq.${activeFamilyId}`,
+        },
+        () =>
+          void refreshFamilies().catch((error: unknown) =>
+            notifyError(messageFromError(error))
+          )
+      )
+      .on(
+        "postgres_changes",
+        {
           event: "*",
           schema: "public",
           table: "family_members",
@@ -451,7 +481,7 @@ export function FamilyDashboard({
         },
         () =>
           void refreshDetails(activeFamilyId).catch((error: unknown) =>
-            setErrorMessage(messageFromError(error))
+            notifyError(messageFromError(error))
           )
       )
       .on(
@@ -464,7 +494,7 @@ export function FamilyDashboard({
         },
         () =>
           void refreshDetails(activeFamilyId).catch((error: unknown) =>
-            setErrorMessage(messageFromError(error))
+            notifyError(messageFromError(error))
           )
       )
       .on(
@@ -477,7 +507,7 @@ export function FamilyDashboard({
         },
         () =>
           void refreshDetails(activeFamilyId).catch((error: unknown) =>
-            setErrorMessage(messageFromError(error))
+            notifyError(messageFromError(error))
           )
       )
       .on(
@@ -485,7 +515,7 @@ export function FamilyDashboard({
         { event: "*", schema: "public", table: "claims" },
         () =>
           void refreshDetails(activeFamilyId).catch((error: unknown) =>
-            setErrorMessage(messageFromError(error))
+            notifyError(messageFromError(error))
           )
       )
       .on(
@@ -498,7 +528,7 @@ export function FamilyDashboard({
         },
         () =>
           void refreshDetails(activeFamilyId).catch((error: unknown) =>
-            setErrorMessage(messageFromError(error))
+            notifyError(messageFromError(error))
           )
       )
       .on(
@@ -506,25 +536,22 @@ export function FamilyDashboard({
         { event: "*", schema: "public", table: "team_up_members" },
         () =>
           void refreshDetails(activeFamilyId).catch((error: unknown) =>
-            setErrorMessage(messageFromError(error))
+            notifyError(messageFromError(error))
           )
       )
       .subscribe()
     return () => {
       void client.removeChannel(channel)
     }
-  }, [activeFamilyId, client, refreshDetails])
+  }, [activeFamilyId, client, refreshDetails, refreshFamilies])
 
   function reportError(error: unknown) {
-    setErrorMessage(messageFromError(error))
-    setNotice("")
+    notifyError(messageFromError(error))
   }
 
   async function createFamily(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsSubmitting(true)
-    setErrorMessage("")
-    setNotice("")
     try {
       const { data, error } = await client.rpc("create_family", {
         p_name: familyName.trim(),
@@ -543,7 +570,7 @@ export function FamilyDashboard({
       clearFamilyDetails()
       setActiveFamilyId(created.family_id)
       setFamilyName("")
-      setNotice(`Created ${created.name} (${created.year}).`)
+      notifySuccess(`Created ${created.name} (${created.year}).`)
     } catch (error) {
       reportError(error)
     } finally {
@@ -554,11 +581,9 @@ export function FamilyDashboard({
   async function joinFamily(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsSubmitting(true)
-    setErrorMessage("")
-    setNotice("")
     try {
       const { data, error } = await client.rpc("join_family", {
-        p_invite_code: inviteCode.trim(),
+        p_invite_code: inviteCode.replace(/[\s-]/g, ""),
       })
       if (error) throw new Error(error.message)
       const joined = data[0]
@@ -567,8 +592,74 @@ export function FamilyDashboard({
       clearFamilyDetails()
       setActiveFamilyId(joined.family_id)
       setInviteCode("")
-      setNotice(`You joined ${joined.name} (${joined.year}).`)
+      notifySuccess(`You joined ${joined.name} (${joined.year}).`)
       window.history.replaceState({}, "", window.location.pathname)
+    } catch (error) {
+      reportError(error)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleScannedInvite = useCallback((code: string) => {
+    setInviteCode(code)
+    setScanningInvite(false)
+    notifyInfo("Invite scanned. Select Join family to continue.")
+  }, [])
+
+  async function deleteFamily() {
+    if (!activeFamily || activeFamily.role !== "owner" || !canDeleteFamily)
+      return
+    if (
+      !window.confirm(
+        `Delete ${activeFamily.name} (${activeFamily.year})? This permanently removes its gifts and invitations.`
+      )
+    )
+      return
+    setIsSubmitting(true)
+    try {
+      const { error } = await client.rpc("delete_empty_family", {
+        p_family_id: activeFamily.id,
+      })
+      if (error) throw new Error(error.message)
+      clearFamilyDetails()
+      setFamilies((current) =>
+        current.filter((family) => family.id !== activeFamily.id)
+      )
+      setActiveFamilyId("")
+      notifySuccess(`Deleted ${activeFamily.name}.`)
+      await refreshFamilies()
+    } catch (error) {
+      reportError(error)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function regenerateInvite() {
+    if (!activeFamily || activeFamily.role !== "owner") return
+    if (
+      !window.confirm(
+        "Create a new invite? The old link, QR code, and code will stop working."
+      )
+    )
+      return
+    setIsSubmitting(true)
+    try {
+      const { data, error } = await client.rpc("regenerate_family_invite", {
+        p_family_id: activeFamily.id,
+      })
+      if (error) throw new Error(error.message)
+      setFamilies((current) =>
+        current.map((family) =>
+          family.id === activeFamily.id
+            ? { ...family, invite_code: data }
+            : family
+        )
+      )
+      notifySuccess(
+        "A new family invite is ready. The old invite no longer works."
+      )
     } catch (error) {
       reportError(error)
     } finally {
@@ -579,8 +670,6 @@ export function FamilyDashboard({
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsSubmitting(true)
-    setErrorMessage("")
-    setNotice("")
     try {
       const year = birthYear.trim() ? Number(birthYear) : null
       if (
@@ -613,7 +702,7 @@ export function FamilyDashboard({
         .update({ birth_year: year, share_age: shareAge })
         .eq("user_id", user.id)
       if (privateError) throw new Error(privateError.message)
-      setNotice("Your profile was saved.")
+      notifySuccess("Your profile was saved.")
       if (activeFamilyId) await refreshDetails(activeFamilyId)
     } catch (error) {
       reportError(error)
@@ -624,7 +713,6 @@ export function FamilyDashboard({
 
   async function updateTreeTheme(theme: TreeTheme) {
     if (!activeFamily || activeFamily.role !== "owner") return
-    setErrorMessage("")
     const { error } = await client
       .from("families")
       .update({ tree_theme: theme })
@@ -640,7 +728,27 @@ export function FamilyDashboard({
           : family
       )
     )
-    setNotice("Tree theme updated for everyone in the family.")
+    notifySuccess("Tree theme updated for everyone in the family.")
+  }
+
+  async function updateAppTheme(theme: AppTheme) {
+    if (theme === appTheme || isSavingTheme) return
+    setIsSavingTheme(true)
+    try {
+      const { data, error } = await client
+        .from("profile_private")
+        .update({ app_theme: theme })
+        .eq("user_id", user.id)
+        .select("app_theme")
+        .single()
+      if (error) throw new Error(error.message)
+      setAppTheme(data.app_theme)
+      notifySuccess("Your personal theme was saved.")
+    } catch (error) {
+      reportError(error)
+    } finally {
+      setIsSavingTheme(false)
+    }
   }
 
   async function renameGift(giftId: string) {
@@ -671,8 +779,7 @@ export function FamilyDashboard({
     const link = `${window.location.origin}/?join=${encodeURIComponent(activeFamily.invite_code)}`
     try {
       await navigator.clipboard.writeText(link)
-      setNotice("Family invite link copied.")
-      setErrorMessage("")
+      notifySuccess("Family invite link copied.")
     } catch (error) {
       reportError(error)
     }
@@ -692,8 +799,6 @@ export function FamilyDashboard({
       return
     }
     setIsSubmitting(true)
-    setErrorMessage("")
-    setNotice("")
     try {
       const preview = url
         ? await fetchLinkPreview(client, url)
@@ -714,7 +819,7 @@ export function FamilyDashboard({
       })
       if (error) throw new Error(error.message)
       setGiftForm(blankGift)
-      setNotice("Added to your wish list.")
+      notifySuccess("Added to your wish list.")
       await refreshDetails(activeFamily.id)
     } catch (error) {
       reportError(error)
@@ -726,8 +831,6 @@ export function FamilyDashboard({
   async function importOriginalList() {
     if (!activeFamily) return
     setIsSubmitting(true)
-    setErrorMessage("")
-    setNotice("")
     try {
       const { data: existing, error: existingError } = await client
         .from("gifts")
@@ -749,12 +852,14 @@ export function FamilyDashboard({
           image_url: gift.image,
         }))
       if (giftsToAdd.length === 0) {
-        setNotice("Your original list is already imported.")
+        notifyInfo("Your original list is already imported.")
         return
       }
       const { error } = await client.from("gifts").insert(giftsToAdd)
       if (error) throw new Error(error.message)
-      setNotice(`Imported ${giftsToAdd.length} gifts from your original list.`)
+      notifySuccess(
+        `Imported ${giftsToAdd.length} gifts from your original list.`
+      )
       await refreshDetails(activeFamily.id)
     } catch (error) {
       reportError(error)
@@ -765,12 +870,10 @@ export function FamilyDashboard({
 
   async function claimGift(giftId: string) {
     setPendingId(giftId)
-    setErrorMessage("")
-    setNotice("")
     try {
       const { error } = await client.rpc("claim_gift", { p_gift_id: giftId })
       if (error) throw new Error(error.message)
-      setNotice(
+      notifySuccess(
         "You claimed this gift. The person who wants it cannot see your claim."
       )
       if (activeFamilyId) await refreshDetails(activeFamilyId)
@@ -783,13 +886,12 @@ export function FamilyDashboard({
 
   async function releaseClaim(giftId: string) {
     setPendingId(giftId)
-    setErrorMessage("")
     try {
       const { error } = await client.rpc("release_gift_claim", {
         p_gift_id: giftId,
       })
       if (error) throw new Error(error.message)
-      setNotice("Your claim was removed.")
+      notifySuccess("Your claim was removed.")
       if (activeFamilyId) await refreshDetails(activeFamilyId)
     } catch (error) {
       reportError(error)
@@ -801,7 +903,6 @@ export function FamilyDashboard({
   async function deleteGift(giftId: string) {
     if (!activeFamily) return
     setPendingId(giftId)
-    setErrorMessage("")
     try {
       const { error } = await client
         .from("gifts")
@@ -809,7 +910,7 @@ export function FamilyDashboard({
         .eq("id", giftId)
         .eq("owner_id", user.id)
       if (error) throw new Error(error.message)
-      setNotice("Gift removed from your list.")
+      notifySuccess("Gift removed from your list.")
       await refreshDetails(activeFamily.id)
     } catch (error) {
       reportError(error)
@@ -820,13 +921,14 @@ export function FamilyDashboard({
 
   async function createTeamUp(giftId: string) {
     setPendingId(giftId)
-    setErrorMessage("")
     try {
       const { error } = await client.rpc("create_team_up", {
         p_gift_id: giftId,
       })
       if (error) throw new Error(error.message)
-      setNotice("Team-up created. Invite family members from the Team-ups tab.")
+      notifySuccess(
+        "Team-up created. Invite family members from the Team-ups tab."
+      )
       if (activeFamilyId) await refreshDetails(activeFamilyId)
     } catch (error) {
       reportError(error)
@@ -837,13 +939,12 @@ export function FamilyDashboard({
 
   async function confirmTeamUp(teamUpId: string) {
     setPendingId(teamUpId)
-    setErrorMessage("")
     try {
       const { error } = await client.rpc("confirm_team_up", {
         p_team_up_id: teamUpId,
       })
       if (error) throw new Error(error.message)
-      setNotice("You're on the team-up.")
+      notifySuccess("You're on the team-up.")
       if (activeFamilyId) await refreshDetails(activeFamilyId)
     } catch (error) {
       reportError(error)
@@ -856,7 +957,6 @@ export function FamilyDashboard({
     const userId = inviteTargets[teamUpId]
     if (!userId) return
     setPendingId(teamUpId)
-    setErrorMessage("")
     try {
       const { error } = await client.rpc("invite_to_team_up", {
         p_team_up_id: teamUpId,
@@ -864,7 +964,9 @@ export function FamilyDashboard({
       })
       if (error) throw new Error(error.message)
       setInviteTargets((current) => ({ ...current, [teamUpId]: "" }))
-      setNotice("Invitation sent. They'll see the team-up once they log in.")
+      notifySuccess(
+        "Invitation sent. They'll see the team-up once they log in."
+      )
       if (activeFamilyId) await refreshDetails(activeFamilyId)
     } catch (error) {
       reportError(error)
@@ -888,14 +990,15 @@ export function FamilyDashboard({
       return
     }
     setPendingId(teamUpId)
-    setErrorMessage("")
     try {
       const { error } = await client.rpc("complete_team_up", {
         p_team_up_id: teamUpId,
         p_purchase_proof_url: proofUrl,
       })
       if (error) throw new Error(error.message)
-      setNotice("Team-up marked purchased with proof. The gift is now claimed.")
+      notifySuccess(
+        "Team-up marked purchased with proof. The gift is now claimed."
+      )
       if (activeFamilyId) await refreshDetails(activeFamilyId)
     } catch (error) {
       reportError(error)
@@ -928,15 +1031,21 @@ export function FamilyDashboard({
   useEffect(() => {
     const root = document.documentElement
     const meta = document.querySelector('meta[name="theme-color"]')
-    root.dataset.treeTheme = activeFamily?.tree_theme ?? "classic"
+    const previousMetaColor = meta?.getAttribute("content")
+    root.dataset.appTheme =
+      appTheme === "family" ? (activeFamily?.tree_theme ?? "classic") : appTheme
     const bg = getComputedStyle(
       document.querySelector(".app-background") ?? root
     ).getPropertyValue("--app-via")
     if (meta && bg) meta.setAttribute("content", bg.trim())
     return () => {
-      delete root.dataset.treeTheme
+      delete root.dataset.appTheme
+      if (meta && previousMetaColor !== undefined) {
+        if (previousMetaColor === null) meta.removeAttribute("content")
+        else meta.setAttribute("content", previousMetaColor)
+      }
     }
-  }, [activeFamily?.tree_theme])
+  }, [activeFamily?.tree_theme, appTheme])
 
   return (
     <div className="space-y-6">
@@ -988,15 +1097,6 @@ export function FamilyDashboard({
         </div>
       </header>
 
-      {(errorMessage || notice) && (
-        <div
-          aria-live="polite"
-          className={`rounded-lg px-4 py-3 text-sm ${errorMessage ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}`}
-        >
-          {errorMessage || notice}
-        </div>
-      )}
-
       <nav
         aria-label="Gift Elf sections"
         className="app-nav flex flex-wrap gap-2"
@@ -1028,13 +1128,13 @@ export function FamilyDashboard({
       </nav>
 
       {view === "tree" && (
-        <section className="px-1 py-2 sm:p-5">
+        <section className="page-transition px-1 py-2 sm:p-5">
           <h2 className="text-center text-2xl font-bold">
             {activeFamily ? activeFamily.name : "Your family tree"}
           </h2>
           {details.members.length > 0 ? (
             <>
-              <p className="mb-4 text-center text-sm opacity-80">
+              <p className="mb-4 text-center text-sm">
                 Pick an ornament to see that person&rsquo;s wish list.
               </p>
               <FamilyTree
@@ -1045,7 +1145,7 @@ export function FamilyDashboard({
               />
             </>
           ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">
+            <p className="py-8 text-center text-sm">
               {isLoading
                 ? "Decorating the tree..."
                 : "Create or join a family to hang your ornaments."}{" "}
@@ -1061,7 +1161,7 @@ export function FamilyDashboard({
 
       {view === "family" && (
         <>
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="page-transition grid gap-5 lg:grid-cols-2">
             <form
               className="space-y-3 rounded-2xl bg-white p-5 shadow-lg"
               onSubmit={createFamily}
@@ -1091,7 +1191,7 @@ export function FamilyDashboard({
                 />
               </div>
               <Button
-                className="rounded-lg bg-accent-red text-white hover:bg-[#e23e46]"
+                className="rounded-lg bg-accent-red text-white hover:bg-[#a81e2d]"
                 disabled={isSubmitting}
                 type="submit"
               >
@@ -1108,7 +1208,7 @@ export function FamilyDashboard({
                 Join a family
               </h2>
               <p className="text-sm text-muted-foreground">
-                Enter a current-year invite code.
+                Type a family invite code or scan its QR code.
               </p>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
@@ -1118,7 +1218,7 @@ export function FamilyDashboard({
                   onChange={(event) =>
                     setInviteCode(event.target.value.toUpperCase())
                   }
-                  placeholder="Paste family code"
+                  placeholder="Type or paste family code"
                   required
                   value={inviteCode}
                 />
@@ -1130,15 +1230,30 @@ export function FamilyDashboard({
                   Join family
                 </Button>
               </div>
+              <Button
+                className="gap-2 rounded-lg"
+                onClick={() => setScanningInvite((current) => !current)}
+                type="button"
+                variant="outline"
+              >
+                <Camera aria-hidden="true" className="size-4" />
+                {scanningInvite ? "Close camera" : "Scan invite QR code"}
+              </Button>
+              {scanningInvite && (
+                <InviteScanner
+                  onClose={() => setScanningInvite(false)}
+                  onScan={handleScannedInvite}
+                />
+              )}
             </form>
           </div>
 
           {isLoading ? (
-            <p className="rounded-xl bg-white p-6 text-sm text-muted-foreground">
+            <p className="page-transition rounded-xl bg-white p-6 text-sm text-muted-foreground">
               Loading your families…
             </p>
           ) : activeFamily ? (
-            <section className="space-y-5 rounded-2xl bg-white p-5 shadow-lg sm:p-8">
+            <section className="page-transition space-y-5 rounded-2xl bg-white p-5 shadow-lg sm:p-8">
               <div className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="font-mono text-xs tracking-[0.18em] text-accent-red uppercase">
@@ -1166,8 +1281,8 @@ export function FamilyDashboard({
                     size={112}
                     value={`${window.location.origin}/?join=${encodeURIComponent(activeFamily.invite_code)}`}
                   />
-                  <span className="font-mono text-xs font-semibold">
-                    {activeFamily.invite_code}
+                  <span className="max-w-40 text-center font-mono text-xs font-semibold break-all">
+                    {activeFamily.invite_code.match(/.{1,4}/g)?.join(" ")}
                   </span>
                   <Button
                     className="gap-2 rounded-lg"
@@ -1178,6 +1293,18 @@ export function FamilyDashboard({
                     <Copy aria-hidden="true" className="size-4" />
                     Copy invite link
                   </Button>
+                  {activeFamily.role === "owner" && (
+                    <Button
+                      className="gap-2 rounded-lg"
+                      disabled={isSubmitting}
+                      onClick={() => void regenerateInvite()}
+                      size="sm"
+                      variant="outline"
+                    >
+                      <RefreshCw aria-hidden="true" className="size-4" />
+                      New invite
+                    </Button>
+                  )}
                   <span className="max-w-40 text-center text-xs text-muted-foreground">
                     Expires{" "}
                     {new Date(
@@ -1186,6 +1313,25 @@ export function FamilyDashboard({
                   </span>
                 </div>
               </div>
+
+              {activeFamily.role === "owner" && (
+                <div className="space-y-2 border-t border-border pt-5">
+                  <Button
+                    className="gap-2 rounded-lg"
+                    disabled={isSubmitting || !canDeleteFamily}
+                    onClick={() => void deleteFamily()}
+                    type="button"
+                    variant="destructive"
+                  >
+                    <Trash2 aria-hidden="true" className="size-4" />
+                    Delete family tree
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Only the owner can delete a family, and only when no other
+                    members have joined.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-2 border-t border-border pt-5">
                 <h3 className="font-semibold text-lighter-black">Tree theme</h3>
@@ -1215,7 +1361,7 @@ export function FamilyDashboard({
               </div>
             </section>
           ) : (
-            <p className="rounded-xl bg-white p-6 text-sm text-muted-foreground">
+            <p className="page-transition rounded-xl bg-white p-6 text-sm text-muted-foreground">
               You haven&apos;t joined a family yet. Create one or use an invite
               code to get started.
             </p>
@@ -1225,9 +1371,8 @@ export function FamilyDashboard({
 
       {(view === "profile" || view === "list") && (
         <div
-          className={
-            isOwnProfileArea ? "grid gap-5 md:grid-cols-[12rem_1fr]" : ""
-          }
+          className={`page-transition ${isOwnProfileArea ? "grid gap-5 md:grid-cols-[12rem_1fr]" : ""}`}
+          key={pathname}
         >
           {isOwnProfileArea && (
             <aside
@@ -1267,6 +1412,33 @@ export function FamilyDashboard({
                     optional.
                   </p>
                 </div>
+                <fieldset className="personal-theme-options space-y-2 sm:col-span-2">
+                  <legend className="text-sm font-semibold text-lighter-black">
+                    Your app theme
+                  </legend>
+                  <p className="text-sm text-muted-foreground">
+                    Saved to your account. The family tree theme stays shared.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {appThemes.map((theme) => (
+                      <button
+                        aria-pressed={appTheme === theme.value}
+                        className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold text-lighter-black transition disabled:opacity-60 ${appTheme === theme.value ? "border-accent-red ring-2 ring-accent-red/30" : "border-border"}`}
+                        disabled={isLoading || isSavingTheme}
+                        key={theme.value}
+                        onClick={() => void updateAppTheme(theme.value)}
+                        type="button"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="size-4 rounded-full border border-black/20"
+                          style={{ backgroundColor: theme.color }}
+                        />
+                        {theme.label}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
                 <Input
                   aria-label="Display name"
                   className="h-11 rounded-lg px-3"
@@ -1476,7 +1648,7 @@ export function FamilyDashboard({
                       value={giftForm.notes}
                     />
                     <Button
-                      className="rounded-lg bg-accent-red text-white hover:bg-[#e23e46]"
+                      className="rounded-lg bg-accent-red text-white hover:bg-[#a81e2d]"
                       disabled={isSubmitting}
                       type="submit"
                     >
@@ -1672,7 +1844,7 @@ export function FamilyDashboard({
                           ) : (
                             <div className="flex gap-2">
                               <Button
-                                className="flex-1 rounded-lg bg-accent-red text-white hover:bg-[#e23e46]"
+                                className="flex-1 rounded-lg bg-accent-red text-white hover:bg-[#a81e2d]"
                                 disabled={pendingId === gift.id}
                                 onClick={() => void claimGift(gift.id)}
                               >
@@ -1710,7 +1882,7 @@ export function FamilyDashboard({
         </div>
       )}
       {view === "team-ups" && activeFamily && (
-        <section className="space-y-4 rounded-2xl bg-white p-5 shadow-lg sm:p-8">
+        <section className="page-transition space-y-4 rounded-2xl bg-white p-5 shadow-lg sm:p-8">
           <div className="flex items-center gap-3">
             <Users aria-hidden="true" className="size-6 text-accent-red" />
             <div>
@@ -1778,7 +1950,7 @@ export function FamilyDashboard({
                     </p>
                     {teamUp.status === "open" && !isConfirmed && (
                       <Button
-                        className="w-full rounded-lg bg-accent-red text-white hover:bg-[#e23e46]"
+                        className="w-full rounded-lg bg-accent-red text-white hover:bg-[#a81e2d]"
                         disabled={pendingId === teamUp.id}
                         onClick={() => void confirmTeamUp(teamUp.id)}
                       >

@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react"
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom"
 import type { Session } from "@supabase/supabase-js"
 
 import { AuthPanel } from "@/components/auth-panel"
@@ -7,6 +13,7 @@ import { BrandShell } from "@/components/brand-shell"
 import { PixelTree } from "@/components/pixel-art"
 import { FamilyDashboard } from "@/components/family-dashboard"
 import { SupabaseSetup } from "@/components/supabase-setup"
+import { notifyError } from "@/lib/notifications"
 import type { GiftElfSupabaseClient } from "@/lib/supabase"
 import { supabase } from "@/lib/supabase"
 
@@ -35,9 +42,9 @@ type AuthenticatedAppProps = {
 }
 
 function AuthenticatedApp({ client }: AuthenticatedAppProps) {
+  const location = useLocation()
   const [session, setSession] = useState<Session | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [authError, setAuthError] = useState("")
 
   useEffect(() => {
     let isActive = true
@@ -47,7 +54,6 @@ function AuthenticatedApp({ client }: AuthenticatedAppProps) {
       if (!isActive) return
       setSession(nextSession)
       setIsLoading(false)
-      setAuthError("")
     })
 
     client.auth
@@ -55,7 +61,7 @@ function AuthenticatedApp({ client }: AuthenticatedAppProps) {
       .then(({ data, error }) => {
         if (!isActive) return
         if (error) {
-          setAuthError(error.message)
+          notifyError(error.message)
         } else {
           setSession(data.session)
         }
@@ -63,7 +69,7 @@ function AuthenticatedApp({ client }: AuthenticatedAppProps) {
       })
       .catch((error: unknown) => {
         if (!isActive) return
-        setAuthError(
+        notifyError(
           error instanceof Error
             ? error.message
             : "Could not read the Supabase session."
@@ -78,26 +84,15 @@ function AuthenticatedApp({ client }: AuthenticatedAppProps) {
   }, [client])
 
   async function signOut() {
-    setAuthError("")
-
     try {
       const { error } = await client.auth.signOut()
-      if (error) setAuthError(error.message)
+      if (error) notifyError(error.message)
     } catch (error) {
-      setAuthError(
+      notifyError(
         error instanceof Error ? error.message : "Could not sign out."
       )
     }
   }
-
-  const errorBanner = authError && (
-    <p
-      aria-live="polite"
-      className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-800"
-    >
-      {authError}
-    </p>
-  )
 
   if (isLoading) {
     return (
@@ -118,7 +113,6 @@ function AuthenticatedApp({ client }: AuthenticatedAppProps) {
     return (
       <BrandShell>
         <div className="space-y-5">
-          {errorBanner}
           <AuthPanel client={client} />
         </div>
       </BrandShell>
@@ -132,7 +126,6 @@ function AuthenticatedApp({ client }: AuthenticatedAppProps) {
   return (
     <BrandShell variant="app">
       <div className="space-y-5">
-        {errorBanner}
         <Routes>
           <Route path="/tree" element={dashboard} />
           <Route path="/family" element={dashboard} />
@@ -144,7 +137,20 @@ function AuthenticatedApp({ client }: AuthenticatedAppProps) {
           />
           <Route path="/list/:ownerId" element={dashboard} />
           <Route path="/team-ups" element={dashboard} />
-          <Route path="*" element={<Navigate to="/tree" replace />} />
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to={{
+                  pathname: new URLSearchParams(location.search).has("join")
+                    ? "/family"
+                    : "/tree",
+                  search: location.search,
+                }}
+                replace
+              />
+            }
+          />
         </Routes>
       </div>
     </BrandShell>

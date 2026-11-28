@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { ArrowRight, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { notifyError, notifyInfo, notifySuccess } from "@/lib/notifications"
 import type { GiftElfSupabaseClient } from "@/lib/supabase"
 
 type AuthPanelProps = {
@@ -14,8 +15,6 @@ type AuthFaceProps = {
   displayName: string
   email: string
   password: string
-  errorMessage: string
-  notice: string
   isSubmitting: boolean
   onDisplayNameChange: (value: string) => void
   onEmailChange: (value: string) => void
@@ -30,8 +29,6 @@ function AuthFace({
   displayName,
   email,
   password,
-  errorMessage,
-  notice,
   isSubmitting,
   onDisplayNameChange,
   onEmailChange,
@@ -126,25 +123,8 @@ function AuthFace({
           />
         </label>
 
-        {errorMessage && (
-          <p
-            aria-live="polite"
-            className="rounded-xl bg-red-50 px-4 py-3 text-sm text-destructive"
-          >
-            {errorMessage}
-          </p>
-        )}
-        {notice && (
-          <p
-            aria-live="polite"
-            className="rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700"
-          >
-            {notice}
-          </p>
-        )}
-
         <Button
-          className="h-11 w-full gap-2 rounded-xl bg-accent-red text-sm font-bold text-white shadow-[0_8px_18px_-8px_rgba(251,77,84,0.75)] transition hover:-translate-y-0.5 hover:bg-[#e23e46] hover:shadow-[0_12px_22px_-8px_rgba(251,77,84,0.65)]"
+          className="h-11 w-full gap-2 rounded-xl bg-accent-red text-sm font-bold text-white shadow-[0_8px_18px_-8px_rgba(251,77,84,0.75)] transition hover:-translate-y-0.5 hover:bg-[#a81e2d] hover:shadow-[0_12px_22px_-8px_rgba(251,77,84,0.65)]"
           disabled={isSubmitting}
           type="submit"
         >
@@ -184,22 +164,33 @@ function readOAuthError() {
   )
 }
 
+function inviteRedirectUrl() {
+  const code = new URLSearchParams(window.location.search).get("join")
+  return code
+    ? `${window.location.origin}/?join=${encodeURIComponent(code)}`
+    : undefined
+}
+
 export function AuthPanel({ client }: AuthPanelProps) {
   const [isSignUp, setIsSignUp] = useState(false)
   const [displayName, setDisplayName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [errorMessage, setErrorMessage] = useState(readOAuthError)
-  const [notice, setNotice] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const oauthErrorShown = useRef(false)
+
+  useEffect(() => {
+    if (oauthErrorShown.current) return
+    oauthErrorShown.current = true
+    const error = readOAuthError()
+    if (error) notifyError(error)
+  }, [])
 
   async function submitAuth(
     event: FormEvent<HTMLFormElement>,
     signingUp: boolean
   ) {
     event.preventDefault()
-    setErrorMessage("")
-    setNotice("")
     setIsSubmitting(true)
 
     try {
@@ -207,15 +198,18 @@ export function AuthPanel({ client }: AuthPanelProps) {
         const { data, error } = await client.auth.signUp({
           email: email.trim(),
           password,
-          options: { data: { display_name: displayName.trim() } },
+          options: {
+            data: { display_name: displayName.trim() },
+            emailRedirectTo: inviteRedirectUrl(),
+          },
         })
 
         if (error) {
-          setErrorMessage(error.message)
+          notifyError(error.message)
         } else if (data.session) {
-          setNotice("Your account is ready. Create or join a family below.")
+          notifySuccess("Your account is ready. Create or join a family below.")
         } else {
-          setNotice("Check your email to confirm your account, then sign in.")
+          notifyInfo("Check your email to confirm your account, then sign in.")
         }
       } else {
         const { error } = await client.auth.signInWithPassword({
@@ -223,10 +217,10 @@ export function AuthPanel({ client }: AuthPanelProps) {
           password,
         })
 
-        if (error) setErrorMessage(error.message)
+        if (error) notifyError(error.message)
       }
     } catch (error) {
-      setErrorMessage(
+      notifyError(
         error instanceof Error
           ? error.message
           : "Could not connect to Supabase. Check your connection and try again."
@@ -237,17 +231,17 @@ export function AuthPanel({ client }: AuthPanelProps) {
   }
 
   async function signInWithGoogle() {
-    setErrorMessage("")
-    setNotice("")
     setIsSubmitting(true)
     try {
       const { error } = await client.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: window.location.origin },
+        options: {
+          redirectTo: inviteRedirectUrl() ?? window.location.origin,
+        },
       })
-      if (error) setErrorMessage(error.message)
+      if (error) notifyError(error.message)
     } catch (error) {
-      setErrorMessage(
+      notifyError(
         error instanceof Error
           ? error.message
           : "Could not start Google sign-in."
@@ -259,16 +253,12 @@ export function AuthPanel({ client }: AuthPanelProps) {
 
   function switchMode() {
     setIsSignUp((current) => !current)
-    setErrorMessage("")
-    setNotice("")
   }
 
   const faceProps = {
     displayName,
     email,
-    errorMessage,
     isSubmitting,
-    notice,
     onDisplayNameChange: setDisplayName,
     onEmailChange: setEmail,
     onGoogle: () => void signInWithGoogle(),

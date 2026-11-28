@@ -6,6 +6,7 @@ type Table<Row, Insert, Update = Partial<Insert>> = {
 }
 
 export type TreeTheme = "classic" | "tokyo-night" | "mist" | "amber"
+export type AppTheme = "family" | TreeTheme | "cyberpunk"
 export type AvatarIcon =
   | "gift"
   | "bell"
@@ -54,9 +55,24 @@ export type Database = {
         }
       >
       profile_private: Table<
-        { user_id: string; birth_year: number | null; share_age: boolean },
-        { user_id: string; birth_year?: number | null; share_age?: boolean },
-        { user_id?: string; birth_year?: number | null; share_age?: boolean }
+        {
+          user_id: string
+          birth_year: number | null
+          share_age: boolean
+          app_theme: AppTheme
+        },
+        {
+          user_id: string
+          birth_year?: number | null
+          share_age?: boolean
+          app_theme?: AppTheme
+        },
+        {
+          user_id?: string
+          birth_year?: number | null
+          share_age?: boolean
+          app_theme?: AppTheme
+        }
       >
       families: Table<
         {
@@ -224,6 +240,7 @@ export type Database = {
         Returns: { invite_id: string; display_name: string }[]
       }
       create_team_up: { Args: { p_gift_id: string }; Returns: string }
+      delete_empty_family: { Args: { p_family_id: string }; Returns: undefined }
       get_family_member_ages: {
         Args: { p_family_id: string }
         Returns: { user_id: string; age_label: string | null }[]
@@ -254,6 +271,10 @@ export type Database = {
         }[]
       }
       release_gift_claim: { Args: { p_gift_id: string }; Returns: undefined }
+      regenerate_family_invite: {
+        Args: { p_family_id: string }
+        Returns: string
+      }
     }
     Enums: {
       gift_category: GiftCategory

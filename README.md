@@ -5,7 +5,7 @@ Gift Elf is a family Christmas wish-list app built with React, TypeScript, Vite,
 ## Supabase setup
 
 1. Create a Supabase project.
-2. In the Supabase SQL Editor, run [`supabase/migrations/20261127020000_families_profiles_gifts.sql`](./supabase/migrations/20261127020000_families_profiles_gifts.sql).
+2. In the Supabase SQL Editor, run the files in [`supabase/migrations`](./supabase/migrations) in filename order. For an existing project, run any migrations that have not yet been applied, including `20261128030000_personal_app_theme.sql`.
 3. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from the project's API settings. `VITE_SUPABASE_ANON_KEY` is also supported for older projects. These are browser-safe project values; never put a `service_role` key in the app.
 4. Enable email/password authentication in Supabase. If email confirmation is on, new users need to confirm before signing in.
 
@@ -37,6 +37,18 @@ When new-user sign-ups are enabled in Supabase, a user's first Google sign-in
 creates their account automatically. The migration's `on_auth_user_created`
 trigger also creates their GiftElf profile and private profile, so they can
 continue without completing a separate email sign-up.
+
+Family owners can regenerate an invite, immediately invalidating the old link,
+QR code, and typed code. The owner can delete a family only while they are its
+sole member; deletion also removes that family's gifts and invitations. To
+join, enter the invite code manually or scan its QR code from the Family page.
+Camera scanning requires camera permission and a secure context (HTTPS, or
+localhost for development). Invite and email confirmation redirect URLs must be
+allowed in Supabase URL Configuration.
+
+Each user can choose an account-saved app theme in their profile, including
+Cyberpunk. The default follows the active family's tree theme; a personal
+choice changes only that user's app colors, not the shared tree.
 
 ## Development
 
