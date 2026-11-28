@@ -19,9 +19,19 @@ The app supports email/password and Google sign-in. To enable Google OAuth:
 2. In Supabase, open **Authentication → Sign In / Providers → Google**, enable
    Google, and enter the OAuth client ID and secret. Keep the secret in
    Supabase; do not add it to `.env.local` or the frontend.
-3. In **Authentication → URL Configuration**, allow
-   `http://localhost:5173/**` for local development and add your deployed
-   app URL before using Google sign-in in production.
+3. In **Authentication → URL Configuration**, set the Site URL to your
+   deployed app's HTTPS URL. Add that URL to the Redirect URLs list, along
+   with `http://localhost:5173/**` for local development.
+
+Google sign-in returns to the origin where the app was opened. To sign in on a
+phone away from your home network, deploy the app to a public HTTPS address (or
+use a temporary HTTPS tunnel for testing), add that address to the Supabase
+Redirect URLs list, and open the same address on the phone. Add each new tunnel
+address when it changes. `localhost` refers to the device itself, so a phone
+cannot use `localhost:5173` to reach a server running on your computer. If the
+app's address is not allowed, Supabase may fall back to its Site URL, which can
+send users to localhost if that is still configured there. The Google Cloud
+redirect URI remains the Supabase callback from step 1, not the app URL.
 
 When new-user sign-ups are enabled in Supabase, a user's first Google sign-in
 creates their account automatically. The migration's `on_auth_user_created`

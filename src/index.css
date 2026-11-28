@@ -368,13 +368,7 @@ html[data-tree-theme="amber"] .app-background {
 }
 
 .intro-overlay {
-  background:
-    radial-gradient(
-      ellipse at 82% 100%,
-      rgba(31, 143, 107, 0.48),
-      transparent 42%
-    ),
-    linear-gradient(145deg, #e94753 0%, #cf3342 58%, #a82035 100%);
+  background: linear-gradient(145deg, #e94753 0%, #cf3342 58%, #a82035 100%);
   pointer-events: none;
   animation: intro-exit 0.45s ease-in 3.1s forwards;
 }
