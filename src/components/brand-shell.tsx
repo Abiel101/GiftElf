@@ -18,12 +18,12 @@ export function BrandShell({ children, variant = "landing" }: BrandShellProps) {
 
 function AppShell({ children }: { children: ReactNode }) {
   return (
-    <main className="auth-background relative min-h-dvh">
+    <main className="app-background relative min-h-dvh">
       <div
         aria-hidden="true"
         className="snow-overlay pointer-events-none absolute inset-0 z-0"
       />
-      <div className="relative z-10 mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+      <div className="relative z-10 mx-auto w-full max-w-6xl px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-6">
         {children}
       </div>
     </main>

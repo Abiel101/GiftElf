@@ -46,10 +46,7 @@ export function FamilyTree({
   let index = 0
 
   return (
-    <div
-      className="family-tree relative mx-auto w-full max-w-xl rounded-2xl"
-      style={{ backgroundColor: palette.background }}
-    >
+    <div className="family-tree relative mx-auto w-full max-w-xl">
       <svg
         aria-hidden="true"
         className="block h-auto w-full"

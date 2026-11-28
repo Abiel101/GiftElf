@@ -923,7 +923,20 @@ export function FamilyDashboard({
   }
 
   const navClass = (selected: boolean) =>
-    `rounded-full px-4 py-2 text-sm font-semibold ${selected ? "bg-accent-red text-white" : "bg-white text-lighter-black"}`
+    `app-nav-link rounded-full px-4 py-2 text-sm font-semibold ${selected ? "is-active" : ""}`
+
+  useEffect(() => {
+    const root = document.documentElement
+    const meta = document.querySelector('meta[name="theme-color"]')
+    root.dataset.treeTheme = activeFamily?.tree_theme ?? "classic"
+    const bg = getComputedStyle(
+      document.querySelector(".app-background") ?? root
+    ).getPropertyValue("--app-via")
+    if (meta && bg) meta.setAttribute("content", bg.trim())
+    return () => {
+      delete root.dataset.treeTheme
+    }
+  }, [activeFamily?.tree_theme])
 
   return (
     <div className="space-y-6">
@@ -984,7 +997,10 @@ export function FamilyDashboard({
         </div>
       )}
 
-      <nav aria-label="Gift Elf sections" className="flex flex-wrap gap-2">
+      <nav
+        aria-label="Gift Elf sections"
+        className="app-nav flex flex-wrap gap-2"
+      >
         <NavLink className={({ isActive }) => navClass(isActive)} to="/tree">
           Tree
         </NavLink>
@@ -1012,13 +1028,13 @@ export function FamilyDashboard({
       </nav>
 
       {view === "tree" && (
-        <section className="rounded-2xl bg-white/95 p-5 shadow-lg">
-          <h2 className="text-center text-xl font-bold text-lighter-black">
+        <section className="px-1 py-2 sm:p-5">
+          <h2 className="text-center text-2xl font-bold">
             {activeFamily ? activeFamily.name : "Your family tree"}
           </h2>
           {details.members.length > 0 ? (
             <>
-              <p className="mb-2 text-center text-sm text-muted-foreground">
+              <p className="mb-4 text-center text-sm opacity-80">
                 Pick an ornament to see that person&rsquo;s wish list.
               </p>
               <FamilyTree
