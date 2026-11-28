@@ -481,8 +481,33 @@ html[data-app-theme="cyberpunk"] .app-nav-link.is-active {
 
 .tree-page-heading {
   min-width: 0;
+  container-type: inline-size;
   padding: max(1rem, env(safe-area-inset-top)) 1rem 0.5rem
     max(1rem, env(safe-area-inset-left));
+}
+
+.tree-page-title {
+  overflow: hidden;
+  color: var(--tree-heading);
+  font-size: min(clamp(2rem, 8vw, 2.75rem), var(--title-font-size));
+  line-height: 1;
+  text-shadow: 2px 2px 0 rgb(0 0 0 / 20%);
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tree-page-countdown {
+  text-shadow: 0 0 12px color-mix(in srgb, var(--tree-heading) 55%, transparent);
+}
+
+@media (max-width: 639px) {
+  .tree-page-heading {
+    padding-top: max(
+      env(safe-area-inset-top),
+      clamp(1rem, calc((100dvh - 9rem - 100vw * 1.12) * 0.8), 12rem)
+    );
+  }
 }
 
 .tree-page-scroll {
@@ -504,29 +529,128 @@ html[data-app-theme="cyberpunk"] .app-nav-link.is-active {
 }
 
 .family-tree {
+  --tree-base: clamp(30px, 5dvh, 48px);
   aspect-ratio: 100 / 112;
   max-width: min(57.6rem, calc((100dvh - 9rem) * 0.892857));
-  min-height: max(0px, calc((var(--tree-rows) - 1) * 8.5rem));
+  min-height: max(
+    0px,
+    calc((var(--tree-rows) - 1) * 8.5rem),
+    var(--gift-space)
+  );
 }
 
 @media (min-width: 640px) {
   .tree-page {
-    grid-template-columns: clamp(11rem, 23vw, 20rem) minmax(0, 1fr);
+    --tree-top-space: max(32px, env(safe-area-inset-top));
+    grid-template-columns: clamp(12rem, 29vw, 24rem) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
+    padding-top: var(--tree-top-space);
+  }
+
+  .tree-page-heading {
+    padding-top: max(
+      1rem,
+      env(safe-area-inset-top),
+      calc((100dvh - (100vw - clamp(12rem, 29vw, 24rem)) * 1.12) * 0.6)
+    );
+    padding-right: 0.5rem;
+    text-align: right;
+  }
+
+  .tree-page-title {
+    font-size: min(clamp(2.5rem, 5.8vw, 5.5rem), var(--title-font-size));
+  }
+
+  .tree-page-stage {
+    justify-content: flex-start;
+  }
+
+  .tree-slide {
+    max-width: min(57.6rem, calc((100dvh - var(--tree-top-space)) * 0.892857));
+    margin-left: max(
+      0px,
+      calc(
+        (
+            100vw - 2 * clamp(12rem, 29vw, 24rem) -
+              min(57.6rem, (100dvh - var(--tree-top-space)) * 0.892857)
+          ) /
+          2
+      )
+    );
   }
 
   .tree-page-navigation {
     position: absolute;
     bottom: max(1rem, env(safe-area-inset-bottom));
     left: max(1rem, env(safe-area-inset-left));
-    max-width: calc(clamp(11rem, 23vw, 20rem) - 2rem);
+    max-width: calc(clamp(12rem, 29vw, 24rem) - 2rem);
     max-height: 40dvh;
     overflow-y: auto;
   }
 
   .family-tree {
-    max-width: min(57.6rem, calc(100dvh * 0.892857));
+    max-width: min(57.6rem, calc((100dvh - var(--tree-top-space)) * 0.892857));
   }
+}
+
+.family-tree svg rect,
+.family-tree-light {
+  transition:
+    fill 500ms ease,
+    color 500ms ease;
+}
+
+.tree-theme-preview .family-tree {
+  min-height: 0;
+  --tree-base: 9px;
+  --gift-size: 11px;
+}
+
+.tree-theme-preview .family-tree-trunk {
+  width: 10px;
+}
+
+.tree-theme-preview .family-tree-shadow {
+  height: 6px;
+}
+
+.tree-theme-preview .family-tree-topper {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.tree-theme-preview .family-tree-light {
+  width: 3px;
+  height: 3px;
+}
+
+.tree-theme-preview .family-ornament-icon {
+  width: 1rem;
+  height: 1rem;
+  border-width: 1px;
+  box-shadow: 1px 1px 0 #1c2b24;
+}
+
+.tree-theme-preview .family-ornament-icon svg {
+  width: 0.625rem;
+  height: 0.625rem;
+}
+
+.tree-theme-preview .family-ornament-name {
+  display: none;
+}
+
+.tree-theme-preview .family-tree-gifts {
+  gap: 3px 2px;
+}
+
+.tree-theme-preview .family-tree-gift {
+  border-width: 1px;
+  box-shadow: none;
+}
+
+.tree-theme-preview .family-tree-gift-bow {
+  display: none;
 }
 
 .account-menu-popup {
@@ -727,12 +851,12 @@ html[data-app-theme="cyberpunk"] .app-nav-link.is-active {
 @keyframes snowfall {
   to {
     background-position:
-      10px 100dvh,
-      80px calc(100dvh - 100px),
-      35px calc(100dvh - 70px),
-      120px calc(100dvh - 130px),
-      -40px calc(100dvh - 40px),
-      150px calc(100dvh - 160px);
+      10px 300px,
+      80px 280px,
+      35px 180px,
+      120px 100px,
+      -40px 170px,
+      150px 160px;
   }
 }
 
@@ -814,6 +938,8 @@ html[data-app-theme="cyberpunk"] .app-nav-link.is-active {
   .tree-slide,
   .account-menu-popup,
   .family-tree-topper,
+  .family-tree svg rect,
+  .family-tree-light,
   .page-transition::before,
   .intro-stage::after,
   .app-nav-link {
@@ -827,6 +953,102 @@ html[data-app-theme="cyberpunk"] .app-nav-link.is-active {
   box-shadow: 3px 3px 0 #1c2b24;
   image-rendering: pixelated;
   transition: transform 0.12s steps(2);
+}
+
+.family-tree-canopy {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: calc(100% - var(--tree-base));
+}
+
+.family-tree-shadow {
+  position: absolute;
+  right: 12%;
+  bottom: 0;
+  left: 12%;
+  height: clamp(12px, 2.5dvh, 22px);
+  pointer-events: none;
+  background: radial-gradient(ellipse, rgb(0 0 0 / 40%), transparent 72%);
+}
+
+.family-tree-trunk {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  width: clamp(22px, 4vw, 48px);
+  height: var(--tree-base);
+  pointer-events: none;
+  background: var(--trunk-color);
+  box-shadow: inset -5px 0 rgb(0 0 0 / 18%);
+  transform: translateX(-50%);
+  transition: background-color 500ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .family-tree-trunk {
+    transition: none;
+  }
+}
+
+.family-tree-gifts {
+  position: absolute;
+  z-index: 1;
+  right: 5%;
+  bottom: 0;
+  left: 5%;
+  display: flex;
+  flex-wrap: wrap-reverse;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 8px 4px;
+  pointer-events: none;
+}
+
+.family-tree-gift {
+  position: relative;
+  width: var(--gift-size, clamp(24px, 3.2vw, 44px));
+  height: calc(var(--gift-size, clamp(24px, 3.2vw, 44px)) * 0.72);
+  flex: none;
+  border: 2px solid var(--gift-ribbon);
+  background: var(--gift-color);
+  box-shadow: 2px 2px 0 rgb(0 0 0 / 22%);
+}
+
+.family-tree-gift:nth-child(3n + 2) {
+  height: calc(var(--gift-size, clamp(24px, 3.2vw, 44px)) * 0.9);
+}
+
+.family-tree-gift::before,
+.family-tree-gift::after {
+  position: absolute;
+  content: "";
+  background: var(--gift-ribbon);
+}
+
+.family-tree-gift::before {
+  top: 0;
+  bottom: 0;
+  left: 40%;
+  width: 20%;
+}
+
+.family-tree-gift::after {
+  top: 28%;
+  right: 0;
+  left: 0;
+  height: 15%;
+}
+
+.family-tree-gift-bow {
+  position: absolute;
+  right: 28%;
+  bottom: 100%;
+  left: 28%;
+  height: 6px;
+  border: 2px solid var(--gift-ribbon);
+  border-radius: 50% 50% 0 0;
 }
 
 .family-ornament:hover .family-ornament-icon,
@@ -848,6 +1070,10 @@ html[data-app-theme="cyberpunk"] .app-nav-link.is-active {
 .family-tree-topper {
   filter: drop-shadow(0 0 3px var(--star-glow))
     drop-shadow(0 0 10px var(--star-glow));
+  transition:
+    color 500ms ease,
+    fill 500ms ease,
+    filter 500ms ease;
 }
 
 .family-tree-light {

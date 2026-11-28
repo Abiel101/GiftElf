@@ -5,6 +5,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
+  type ChangeEvent,
   type FormEvent,
   type TouchEvent,
 } from "react"
@@ -31,7 +33,7 @@ import type { User } from "@supabase/supabase-js"
 import { FamilyTree } from "@/components/family-tree"
 import { InviteScanner } from "@/components/invite-scanner"
 import { WishList } from "@/components/wish-list"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -50,7 +52,15 @@ import type {
   TreeTheme,
 } from "@/lib/database.types"
 import { notifyError, notifyInfo, notifySuccess } from "@/lib/notifications"
-import { ORNAMENT_COLORS, ORNAMENT_ICONS, TREE_THEMES } from "@/lib/tree-theme"
+import {
+  customAppColors,
+  customTreePalette,
+  ORNAMENT_COLORS,
+  ORNAMENT_ICONS,
+  randomTreeColors,
+  TREE_THEMES,
+  type CustomThemeColors,
+} from "@/lib/tree-theme"
 import type { GiftElfSupabaseClient } from "@/lib/supabase"
 
 type FamilyRow = Database["public"]["Tables"]["families"]["Row"]
@@ -65,13 +75,21 @@ type TeamUpRow = Database["public"]["Tables"]["team_ups"]["Row"]
 type TeamUpMemberRow = Database["public"]["Tables"]["team_up_members"]["Row"]
 type InviteRow = Database["public"]["Tables"]["family_invites"]["Row"]
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"]
-type FamilySummary = FamilyRow & Pick<MemberRow, "role">
+type CustomTreeTheme =
+  Database["public"]["Tables"]["family_tree_custom_themes"]["Row"]
+type FamilySummary = FamilyRow &
+  Pick<MemberRow, "role"> & { customThemes: CustomTreeTheme[] }
+type ThemeDraft =
+  | { kind: "preset"; theme: TreeTheme }
+  | { kind: "saved"; theme: CustomTreeTheme }
+  | { kind: "random"; colors: CustomThemeColors }
 type FamilyProfile = Pick<
   ProfileRow,
   | "id"
   | "display_name"
   | "avatar_color"
   | "avatar_icon"
+  | "avatar_photo"
   | "favorite_items"
   | "things_they_like"
 > & { role: MemberRow["role"]; age_label: string | null }
@@ -101,6 +119,7 @@ const appThemes: { value: AppTheme; label: string; color: string }[] = [
   { value: "cyberpunk", label: "Cyberpunk", color: "#7c3aed" },
 ]
 const appStartedAt = Date.now()
+const FAMILY_NAME_LIMIT = 24
 const treeNavigationColors: Record<TreeTheme, string> = {
   classic: "#176b52",
   "tokyo-night": "#435b95",
@@ -115,6 +134,59 @@ const familyNavigationColors: Record<TreeTheme, string> = {
   amber: "#38634e",
   cyberpunk: "#00615f",
 }
+const presetBackgrounds: Record<TreeTheme, string> = {
+  classic: "linear-gradient(#cf3342, #bf2d3d 58%, #a82035)",
+  "tokyo-night": "linear-gradient(#24283b, #1a1b26 58%, #16161e)",
+  mist: "linear-gradient(#f4f8fa, #dbe7eb 58%, #b8cfd6)",
+  amber: "linear-gradient(#fff6e6, #ffe3ac 58%, #f5b73b)",
+  cyberpunk: "linear-gradient(#100e29, #291451 58%, #160e35)",
+}
+
+function activeCustomTheme(family: FamilySummary | undefined) {
+  return family?.customThemes.find(
+    (theme) => theme.id === family.custom_tree_theme_id
+  )
+}
+
+function activeCustomColors(family: FamilySummary | undefined) {
+  const saved = activeCustomTheme(family)
+  if (saved) return saved
+  if (
+    family &&
+    typeof family.custom_tree_hue === "number" &&
+    typeof family.custom_tree_accent_hue === "number"
+  ) {
+    return {
+      hue: family.custom_tree_hue,
+      accent_hue: family.custom_tree_accent_hue,
+    }
+  }
+  return undefined
+}
+
+function isAppliedRandomTheme(
+  family: FamilySummary,
+  colors: CustomThemeColors
+) {
+  return (
+    family.custom_tree_hue === colors.hue &&
+    family.custom_tree_accent_hue === colors.accent_hue
+  )
+}
+
+function familyPalette(family: FamilySummary) {
+  const custom = activeCustomColors(family)
+  return custom ? customTreePalette(custom) : TREE_THEMES[family.tree_theme]
+}
+
+function currentThemeDraft(family: FamilySummary): ThemeDraft {
+  const custom = activeCustomTheme(family)
+  if (custom) return { kind: "saved", theme: custom }
+  const colors = activeCustomColors(family)
+  return colors
+    ? { kind: "random", colors }
+    : { kind: "preset", theme: family.tree_theme }
+}
 
 function messageFromError(error: unknown) {
   return error instanceof Error
@@ -122,11 +194,11 @@ function messageFromError(error: unknown) {
     : "Something went wrong. Try again."
 }
 
-function normalizeWebUrl(value: string) {
+function normalizeProofUrl(value: string) {
   if (!value.trim()) return null
   try {
     const url = new URL(value.trim())
-    return url.protocol === "http:" || url.protocol === "https:"
+    return url.protocol === "https:" && url.toString().length <= 2048
       ? url.toString()
       : null
   } catch {
@@ -154,12 +226,45 @@ async function fetchFamilySummaries(
     )
     .order("year", { ascending: false })
   if (familiesError) throw new Error(familiesError.message)
+  if (families.length === 0) return [] as FamilySummary[]
+  if (
+    families.some(
+      (family) =>
+        family.custom_tree_hue === undefined ||
+        family.custom_tree_accent_hue === undefined
+    )
+  ) {
+    throw new Error("Apply the latest Supabase migrations to load tree themes.")
+  }
+  const { data: customThemes, error: customError } = await client
+    .from("family_tree_custom_themes")
+    .select("*")
+    .in(
+      "family_id",
+      families.map((family) => family.id)
+    )
+    .order("created_at")
+  if (customError) throw new Error(customError.message)
+  if (
+    families.some(
+      (family) =>
+        family.custom_tree_theme_id &&
+        !customThemes.some(
+          (theme) =>
+            theme.id === family.custom_tree_theme_id &&
+            theme.family_id === family.id
+        )
+    )
+  ) {
+    throw new Error("A family's custom tree theme could not be loaded.")
+  }
   const roles = new Map(
     memberships.map((membership) => [membership.family_id, membership.role])
   )
   return families.map((family) => ({
     ...family,
     role: roles.get(family.id) ?? "member",
+    customThemes: customThemes.filter((theme) => theme.family_id === family.id),
   }))
 }
 
@@ -202,7 +307,12 @@ async function fetchFamilyDetails(
       .select("*")
       .eq("family_id", familyId)
       .eq("status", "pending"),
-    client.from("claims").select("*").eq("family_id", familyId),
+    client
+      .from("claims")
+      .select(
+        "gift_id,family_id,claimed_by,claimed_at,purchased_at,purchase_proof_url"
+      )
+      .eq("family_id", familyId),
     client.from("team_ups").select("*").eq("family_id", familyId),
     client.rpc("get_family_member_ages", { p_family_id: familyId }),
   ])
@@ -235,7 +345,7 @@ async function fetchFamilyDetails(
   const { data: profiles, error: profileError } = await client
     .from("profiles")
     .select(
-      "id,display_name,avatar_color,avatar_icon,favorite_items,things_they_like"
+      "id,display_name,avatar_color,avatar_icon,avatar_photo,favorite_items,things_they_like"
     )
     .in("id", memberIds)
   if (profileError) throw new Error(profileError.message)
@@ -306,6 +416,8 @@ export function FamilyDashboard({
   const [appTheme, setAppTheme] = useState<AppTheme>("family")
   const [isSavingTheme, setIsSavingTheme] = useState(false)
   const [isSavingTreeTheme, setIsSavingTreeTheme] = useState(false)
+  const [themeDraft, setThemeDraft] = useState<ThemeDraft | null>(null)
+  const [customThemeName, setCustomThemeName] = useState("")
   const [familyName, setFamilyName] = useState("")
   const [familyYear, setFamilyYear] = useState(String(new Date().getFullYear()))
   const [inviteCode, setInviteCode] = useState(
@@ -325,6 +437,8 @@ export function FamilyDashboard({
   const [expiresOn, setExpiresOn] = useState("")
   const [avatarColor, setAvatarColor] = useState(ORNAMENT_COLORS[0])
   const [avatarIcon, setAvatarIcon] = useState<AvatarIcon>("gift")
+  const [avatarPhoto, setAvatarPhoto] = useState<string | null>(null)
+  const [processingPhoto, setProcessingPhoto] = useState(false)
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const { ownerId, childId } = useParams()
@@ -417,6 +531,26 @@ export function FamilyDashboard({
     view === "tree" || appTheme === "family"
       ? (activeFamily?.tree_theme ?? "classic")
       : appTheme
+  const sharedCustomTheme = useMemo(
+    () => activeCustomColors(activeFamily),
+    [activeFamily]
+  )
+  const visualCustomTheme =
+    view === "tree" || appTheme === "family" ? sharedCustomTheme : undefined
+  const draftPalette =
+    themeDraft?.kind === "preset"
+      ? TREE_THEMES[themeDraft.theme]
+      : themeDraft?.kind === "saved"
+        ? customTreePalette(themeDraft.theme)
+        : themeDraft?.kind === "random"
+          ? customTreePalette(themeDraft.colors)
+          : null
+  const draftAppColors =
+    themeDraft?.kind === "saved"
+      ? customAppColors(themeDraft.theme)
+      : themeDraft?.kind === "random"
+        ? customAppColors(themeDraft.colors)
+        : null
   const canDeleteFamily =
     details.members.length === 1 && details.members[0]?.id === user.id
   const memberById = useMemo(
@@ -476,7 +610,7 @@ export function FamilyDashboard({
       client
         .from("profiles")
         .select(
-          "display_name,avatar_color,avatar_icon,favorite_items,things_they_like"
+          "display_name,avatar_color,avatar_icon,avatar_photo,favorite_items,things_they_like"
         )
         .eq("id", user.id)
         .maybeSingle(),
@@ -496,6 +630,7 @@ export function FamilyDashboard({
         )
         setAvatarColor(profileResult.data?.avatar_color ?? ORNAMENT_COLORS[0])
         setAvatarIcon(profileResult.data?.avatar_icon ?? "gift")
+        setAvatarPhoto(profileResult.data?.avatar_photo ?? null)
         setFavoriteItems(profileResult.data?.favorite_items.join(", ") ?? "")
         setThingsTheyLike(profileResult.data?.things_they_like.join(", ") ?? "")
         setBirthYear(privateResult.data?.birth_year?.toString() ?? "")
@@ -543,6 +678,31 @@ export function FamilyDashboard({
     if (!activeFamilyId) return
     const channel = client
       .channel(`family-updates-${activeFamilyId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "family_tree_custom_themes",
+        },
+        () =>
+          void refreshFamilies().catch((error: unknown) =>
+            notifyError(messageFromError(error))
+          )
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "family_tree_custom_themes",
+          filter: `family_id=eq.${activeFamilyId}`,
+        },
+        () =>
+          void refreshFamilies().catch((error: unknown) =>
+            notifyError(messageFromError(error))
+          )
+      )
       .on(
         "postgres_changes",
         {
@@ -801,6 +961,7 @@ export function FamilyDashboard({
           display_name: displayName.trim(),
           avatar_color: avatarColor,
           avatar_icon: avatarIcon,
+          avatar_photo: avatarPhoto,
           favorite_items: favoriteItems
             .split(",")
             .map((item) => item.trim())
@@ -826,25 +987,100 @@ export function FamilyDashboard({
     }
   }
 
-  async function updateTreeTheme(theme: TreeTheme) {
-    if (!activeFamily || activeFamily.role !== "owner" || isSavingTreeTheme)
+  async function choosePhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) return
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      notifyError("Choose a JPEG, PNG, or WebP image.")
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      notifyError("Choose an image smaller than 5 MB.")
+      return
+    }
+    setProcessingPhoto(true)
+    const url = URL.createObjectURL(file)
+    try {
+      const image = new Image()
+      image.src = url
+      await image.decode()
+      const canvas = document.createElement("canvas")
+      canvas.width = 256
+      canvas.height = 256
+      const context = canvas.getContext("2d")
+      if (!context) throw new Error("Unable to process this photo.")
+      const size = Math.min(image.naturalWidth, image.naturalHeight)
+      context.drawImage(
+        image,
+        (image.naturalWidth - size) / 2,
+        (image.naturalHeight - size) / 2,
+        size,
+        size,
+        0,
+        0,
+        256,
+        256
+      )
+      const photo = canvas.toDataURL("image/jpeg", 0.8)
+      if (
+        !photo.startsWith("data:image/jpeg;base64,") ||
+        photo.length > 120000
+      ) {
+        throw new Error("Unable to resize this photo. Try a different image.")
+      }
+      setAvatarPhoto(photo)
+    } catch {
+      notifyError("Unable to process this photo. Try a different image.")
+    } finally {
+      URL.revokeObjectURL(url)
+      setProcessingPhoto(false)
+    }
+  }
+
+  async function applyTreeTheme() {
+    if (
+      !activeFamily ||
+      activeFamily.role !== "owner" ||
+      isSavingTreeTheme ||
+      !themeDraft
+    )
       return
     setIsSavingTreeTheme(true)
     try {
+      const update =
+        themeDraft.kind === "preset"
+          ? {
+              tree_theme: themeDraft.theme,
+              custom_tree_theme_id: null,
+              custom_tree_hue: null,
+              custom_tree_accent_hue: null,
+            }
+          : themeDraft.kind === "saved"
+            ? {
+                custom_tree_theme_id: themeDraft.theme.id,
+                custom_tree_hue: null,
+                custom_tree_accent_hue: null,
+              }
+            : {
+                custom_tree_theme_id: null,
+                custom_tree_hue: themeDraft.colors.hue,
+                custom_tree_accent_hue: themeDraft.colors.accent_hue,
+              }
       const { error } = await client
         .from("families")
-        .update({ tree_theme: theme })
+        .update(update)
         .eq("id", activeFamily.id)
+        .select("id")
+        .single()
       if (error) throw new Error(error.message)
       setFamilies((current) =>
         current.map((family) =>
-          family.id === activeFamily.id
-            ? { ...family, tree_theme: theme }
-            : family
+          family.id === activeFamily.id ? { ...family, ...update } : family
         )
       )
       notifySuccess(
-        `${TREE_THEMES[theme].label} tree theme shared with your family.`
+        `${themeDraft.kind === "preset" ? TREE_THEMES[themeDraft.theme].label : themeDraft.kind === "saved" ? themeDraft.theme.name : "Random"} tree theme shared with your family.`
       )
     } catch (error) {
       reportError(error)
@@ -853,12 +1089,110 @@ export function FamilyDashboard({
     }
   }
 
-  function randomizeTreeTheme() {
-    if (!activeFamily) return
-    const choices = (Object.keys(TREE_THEMES) as TreeTheme[]).filter(
-      (theme) => theme !== activeFamily.tree_theme
+  async function saveCustomTreeTheme(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (
+      !activeFamily ||
+      activeFamily.role !== "owner" ||
+      isSavingTreeTheme ||
+      themeDraft?.kind !== "random"
     )
-    void updateTreeTheme(choices[Math.floor(Math.random() * choices.length)])
+      return
+    const name = customThemeName.trim()
+    if (!name) {
+      notifyError("Enter a name for your custom theme.")
+      return
+    }
+    setIsSavingTreeTheme(true)
+    try {
+      const { data, error } = await client
+        .from("family_tree_custom_themes")
+        .insert({ family_id: activeFamily.id, name, ...themeDraft.colors })
+        .select("*")
+        .single()
+      if (error) throw new Error(error.message)
+      setFamilies((current) =>
+        current.map((family) =>
+          family.id === activeFamily.id
+            ? {
+                ...family,
+                ...(isAppliedRandomTheme(family, themeDraft.colors)
+                  ? {
+                      custom_tree_theme_id: data.id,
+                      custom_tree_hue: null,
+                      custom_tree_accent_hue: null,
+                    }
+                  : {}),
+                customThemes: [
+                  ...family.customThemes.filter((item) => item.id !== data.id),
+                  data,
+                ],
+              }
+            : family
+        )
+      )
+      if (activeFamilyRef.current === activeFamily.id) {
+        setThemeDraft({ kind: "saved", theme: data })
+      }
+      notifySuccess(
+        isAppliedRandomTheme(activeFamily, themeDraft.colors)
+          ? "Your applied theme was saved."
+          : "Custom theme saved. Apply it when you are ready."
+      )
+    } catch (error) {
+      reportError(error)
+    } finally {
+      setIsSavingTreeTheme(false)
+    }
+  }
+
+  async function deleteCustomTreeTheme(theme: CustomTreeTheme) {
+    if (!activeFamily || activeFamily.role !== "owner" || isSavingTreeTheme)
+      return
+    if (
+      !window.confirm(
+        `Delete "${theme.name}"?${activeFamily.custom_tree_theme_id === theme.id ? " The tree will return to its previous preset." : ""}`
+      )
+    )
+      return
+    setIsSavingTreeTheme(true)
+    try {
+      const { data, error } = await client
+        .from("family_tree_custom_themes")
+        .delete()
+        .eq("family_id", activeFamily.id)
+        .eq("id", theme.id)
+        .select("id")
+        .single()
+      if (error) throw new Error(error.message)
+      if (!data) throw new Error("The custom theme could not be deleted.")
+      setFamilies((current) =>
+        current.map((family) =>
+          family.id === activeFamily.id
+            ? {
+                ...family,
+                custom_tree_theme_id:
+                  family.custom_tree_theme_id === theme.id
+                    ? null
+                    : family.custom_tree_theme_id,
+                customThemes: family.customThemes.filter(
+                  (item) => item.id !== theme.id
+                ),
+              }
+            : family
+        )
+      )
+      setThemeDraft((draft) =>
+        draft?.kind === "saved" && draft.theme.id === theme.id
+          ? { kind: "preset", theme: activeFamily.tree_theme }
+          : draft
+      )
+      notifySuccess("Custom theme deleted.")
+    } catch (error) {
+      reportError(error)
+    } finally {
+      setIsSavingTreeTheme(false)
+    }
   }
 
   async function updateAppTheme(theme: AppTheme) {
@@ -1009,6 +1343,30 @@ export function FamilyDashboard({
     }
   }
 
+  async function confirmPurchase(giftId: string, value: string) {
+    const proofUrl = normalizeProofUrl(value)
+    if (!proofUrl) {
+      notifyError(
+        "Enter a valid HTTPS purchase-proof link (up to 2048 characters)."
+      )
+      return
+    }
+    setPendingId(giftId)
+    try {
+      const { error } = await client.rpc("confirm_gift_purchase", {
+        p_gift_id: giftId,
+        p_purchase_proof_url: proofUrl,
+      })
+      if (error) throw new Error(error.message)
+      notifySuccess("Purchase confirmed. A present was added to the tree.")
+      if (activeFamilyId) await refreshDetails(activeFamilyId)
+    } catch (error) {
+      reportError(error)
+    } finally {
+      setPendingId("")
+    }
+  }
+
   async function createTeamUp(giftId: string) {
     setPendingId(giftId)
     try {
@@ -1070,11 +1428,11 @@ export function FamilyDashboard({
     teamUpId: string
   ) {
     event.preventDefault()
-    const proofUrl = normalizeWebUrl(proofUrls[teamUpId] ?? "")
+    const proofUrl = normalizeProofUrl(proofUrls[teamUpId] ?? "")
     if (!proofUrl) {
       reportError(
         new Error(
-          "Add a valid purchase-proof link before marking the team-up complete."
+          "Add a valid HTTPS purchase-proof link before marking the team-up complete."
         )
       )
       return
@@ -1098,11 +1456,14 @@ export function FamilyDashboard({
   }
 
   const selectedMember = memberById.get(listOwnerId)
+  const purchasedGiftCount = details.claims.filter(
+    (claim) => claim.purchased_at !== null
+  ).length
   function openList(ownerId: string) {
     if (details.children.some((child) => child.id === ownerId)) {
       navigate(`/list/child/${ownerId}`)
     } else {
-      navigate(ownerId === user.id ? "/list" : `/list/${ownerId}`)
+      navigate(ownerId === user.id ? "/profile/list" : `/list/${ownerId}`)
     }
   }
 
@@ -1203,12 +1564,27 @@ export function FamilyDashboard({
   useLayoutEffect(() => {
     const root = document.documentElement
     const meta = document.querySelector('meta[name="theme-color"]')
+    const background = document.querySelector<HTMLElement>(".app-background")
     root.dataset.appTheme = visualTheme
-    const bg = getComputedStyle(
-      document.querySelector(".app-background") ?? root
-    ).getPropertyValue("--app-via-target")
+    const properties = visualCustomTheme
+      ? customAppColors(visualCustomTheme)
+      : null
+    if (background && properties) {
+      for (const [name, value] of Object.entries(properties)) {
+        background.style.setProperty(name, value)
+      }
+    }
+    const bg = getComputedStyle(background ?? root).getPropertyValue(
+      "--app-via-target"
+    )
     if (meta && bg) meta.setAttribute("content", bg.trim())
-  }, [visualTheme])
+    return () => {
+      if (background && properties) {
+        for (const name of Object.keys(properties))
+          background.style.removeProperty(name)
+      }
+    }
+  }, [visualTheme, visualCustomTheme])
 
   return (
     <div className="space-y-6">
@@ -1221,18 +1597,27 @@ export function FamilyDashboard({
             aria-label="Open navigation and account menu"
             className="flex min-h-11 items-center gap-3 rounded-xl border-2 border-white/40 px-3 py-2 font-semibold text-white shadow-xl transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             style={{
-              backgroundColor:
-                treeNavigationColors[activeFamily?.tree_theme ?? "classic"],
+              backgroundColor: sharedCustomTheme
+                ? customTreePalette(sharedCustomTheme).background
+                : treeNavigationColors[activeFamily?.tree_theme ?? "classic"],
             }}
           >
             <span
               className="hidden size-9 items-center justify-center rounded-full border-2 border-white/70 sm:flex"
               style={{ backgroundColor: avatarColor }}
             >
-              <AccountIcon
-                aria-hidden="true"
-                className="size-5 text-[#171717]"
-              />
+              {avatarPhoto ? (
+                <img
+                  alt=""
+                  className="size-full rounded-full object-cover"
+                  src={avatarPhoto}
+                />
+              ) : (
+                <AccountIcon
+                  aria-hidden="true"
+                  className="size-5 text-[#171717]"
+                />
+              )}
             </span>
             <span className="hidden max-w-36 truncate text-sm sm:block">
               {displayName || "Menu"}
@@ -1259,10 +1644,11 @@ export function FamilyDashboard({
                   className="mb-1 cursor-pointer rounded-lg px-3 py-2 text-sm font-semibold text-white outline-none data-highlighted:brightness-125"
                   onClick={() => navigate("/tree")}
                   style={{
-                    backgroundColor:
-                      treeNavigationColors[
-                        activeFamily?.tree_theme ?? "classic"
-                      ],
+                    backgroundColor: sharedCustomTheme
+                      ? customTreePalette(sharedCustomTheme).background
+                      : treeNavigationColors[
+                          activeFamily?.tree_theme ?? "classic"
+                        ],
                   }}
                 >
                   Tree{view === "tree" ? " · Current" : ""}
@@ -1272,10 +1658,11 @@ export function FamilyDashboard({
                   className="mb-1 cursor-pointer rounded-lg px-3 py-2 text-sm font-semibold text-white outline-none data-highlighted:brightness-125"
                   onClick={() => navigate("/family")}
                   style={{
-                    backgroundColor:
-                      familyNavigationColors[
-                        activeFamily?.tree_theme ?? "classic"
-                      ],
+                    backgroundColor: sharedCustomTheme
+                      ? `color-mix(in srgb, ${customTreePalette(sharedCustomTheme).background} 75%, ${customTreePalette(sharedCustomTheme).tiers[2]})`
+                      : familyNavigationColors[
+                          activeFamily?.tree_theme ?? "classic"
+                        ],
                   }}
                 >
                   Family{view === "family" ? " · Current" : ""}
@@ -1306,8 +1693,7 @@ export function FamilyDashboard({
                           aria-hidden="true"
                           className="size-3 shrink-0 rounded-full border border-foreground"
                           style={{
-                            backgroundColor:
-                              TREE_THEMES[family.tree_theme].tiers[2],
+                            backgroundColor: familyPalette(family).tiers[2],
                           }}
                         />
                         <span className="min-w-0 flex-1 truncate">
@@ -1368,11 +1754,25 @@ export function FamilyDashboard({
       {view === "tree" && (
         <section className="tree-page h-fullpage-transition">
           <div className="tree-page-heading">
-            <h2 className="max-w-2xl font-mono text-3xl font-black tracking-tight break-words text-[color:var(--tree-heading)] sm:text-5xl lg:text-6xl">
+            <h2
+              className="tree-page-title max-w-2xl font-mono font-black tracking-tight"
+              style={
+                {
+                  "--title-font-size": `${155 / Math.max(1, Array.from((activeFamily?.name ?? "Your family tree").toUpperCase()).length)}cqi`,
+                } as CSSProperties
+              }
+              title={activeFamily?.name ?? "Your family tree"}
+            >
               {activeFamily ? activeFamily.name : "Your family tree"}
             </h2>
+            {activeFamily && detailsFamilyId === activeFamily.id && (
+              <p className="mt-2 text-sm font-semibold">
+                {treeMembers.length}{" "}
+                {treeMembers.length === 1 ? "member" : "members"}
+              </p>
+            )}
             <p
-              className="mt-2 font-mono text-sm font-semibold sm:text-base"
+              className="tree-page-countdown mt-3 font-mono text-base font-bold sm:text-lg"
               aria-live="polite"
             >
               {daysUntilChristmas === 0
@@ -1420,6 +1820,7 @@ export function FamilyDashboard({
                         <FamilyTree
                           currentUserId={user.id}
                           members={[]}
+                          palette={familyPalette(previousFamily)}
                           theme={previousFamily.tree_theme}
                           onSelect={openList}
                         />
@@ -1433,6 +1834,7 @@ export function FamilyDashboard({
                         <FamilyTree
                           currentUserId={user.id}
                           members={[]}
+                          palette={familyPalette(nextFamily)}
                           theme={nextFamily.tree_theme}
                           onSelect={openList}
                         />
@@ -1441,7 +1843,11 @@ export function FamilyDashboard({
                     <div className="relative z-10">
                       <FamilyTree
                         currentUserId={user.id}
+                        giftCount={purchasedGiftCount}
                         members={treeMembers}
+                        palette={
+                          activeFamily ? familyPalette(activeFamily) : undefined
+                        }
                         theme={activeFamily?.tree_theme ?? "classic"}
                         onSelect={openList}
                       />
@@ -1496,8 +1902,7 @@ export function FamilyDashboard({
                       aria-hidden="true"
                       className={`size-5 rounded-full border-2 border-background shadow-sm ${family.id === activeFamilyId ? "ring-2 ring-foreground ring-offset-2 ring-offset-background" : ""}`}
                       style={{
-                        backgroundColor:
-                          TREE_THEMES[family.tree_theme].tiers[2],
+                        backgroundColor: familyPalette(family).tiers[2],
                       }}
                     />
                   </button>
@@ -1573,6 +1978,12 @@ export function FamilyDashboard({
                       setSettingsOpen(open)
                       setOwnerInvite(null)
                       setInviteLoading(open)
+                      if (open) {
+                        setThemeDraft(currentThemeDraft(activeFamily))
+                        setCustomThemeName(
+                          `Custom theme ${activeFamily.customThemes.length + 1}`
+                        )
+                      } else setThemeDraft(null)
                     }}
                   >
                     <SheetTrigger
@@ -1710,15 +2121,60 @@ export function FamilyDashboard({
                         </section>
                         <section className="space-y-2 border-t border-border pt-4">
                           <h3 className="text-sm font-bold">Tree theme</h3>
+                          {themeDraft && draftPalette && (
+                            <div
+                              className="tree-theme-preview relative flex h-44 items-end justify-center overflow-hidden rounded-xl border border-border"
+                              style={{
+                                background:
+                                  themeDraft.kind === "preset"
+                                    ? presetBackgrounds[themeDraft.theme]
+                                    : `linear-gradient(${draftAppColors?.["--app-from"]}, ${draftAppColors?.["--app-via-target"]} 58%, ${draftAppColors?.["--app-to"]})`,
+                              }}
+                            >
+                              <span className="absolute top-2 left-2 rounded bg-black/65 px-2 py-1 text-xs font-semibold text-white">
+                                Preview
+                              </span>
+                              <div aria-hidden="true" className="w-32" inert>
+                                <FamilyTree
+                                  currentUserId={user.id}
+                                  giftCount={
+                                    detailsFamilyId === activeFamily.id
+                                      ? purchasedGiftCount
+                                      : 0
+                                  }
+                                  members={treeMembers.slice(0, 3)}
+                                  onSelect={() => {}}
+                                  palette={draftPalette}
+                                />
+                              </div>
+                            </div>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            Preview a theme, then apply it to share with your
+                            family.
+                          </p>
+                          {activeFamily.custom_tree_hue !== null && (
+                            <p className="text-xs font-semibold">
+                              Current theme: random and not yet saved.
+                            </p>
+                          )}
                           <div className="flex flex-wrap gap-2">
                             {(Object.keys(TREE_THEMES) as TreeTheme[]).map(
                               (key) => (
                                 <button
-                                  aria-pressed={activeFamily.tree_theme === key}
-                                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold ${activeFamily.tree_theme === key ? "border-accent-red ring-2 ring-accent-red/30" : "border-border"}`}
+                                  aria-pressed={
+                                    themeDraft?.kind === "preset" &&
+                                    themeDraft.theme === key
+                                  }
+                                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold ${themeDraft?.kind === "preset" && themeDraft.theme === key ? "border-accent-red ring-2 ring-accent-red/30" : "border-border"}`}
                                   disabled={isSavingTreeTheme}
                                   key={key}
-                                  onClick={() => void updateTreeTheme(key)}
+                                  onClick={() =>
+                                    setThemeDraft({
+                                      kind: "preset",
+                                      theme: key,
+                                    })
+                                  }
                                   type="button"
                                 >
                                   <span
@@ -1730,21 +2186,158 @@ export function FamilyDashboard({
                                     }}
                                   />
                                   {TREE_THEMES[key].label}
+                                  {!activeFamily.custom_tree_theme_id &&
+                                    activeFamily.custom_tree_hue === null &&
+                                    activeFamily.tree_theme === key && (
+                                      <span className="text-xs">Applied</span>
+                                    )}
                                 </button>
                               )
                             )}
                           </div>
+                          {activeFamily.customThemes.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="text-xs font-semibold">
+                                Saved custom themes (
+                                {activeFamily.customThemes.length}/5)
+                              </p>
+                              {activeFamily.customThemes.map((theme) => (
+                                <div
+                                  className="flex items-center gap-2"
+                                  key={theme.id}
+                                >
+                                  <button
+                                    aria-pressed={
+                                      themeDraft?.kind === "saved" &&
+                                      themeDraft.theme.id === theme.id
+                                    }
+                                    className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-semibold ${themeDraft?.kind === "saved" && themeDraft.theme.id === theme.id ? "border-accent-red ring-2 ring-accent-red/30" : "border-border"}`}
+                                    disabled={isSavingTreeTheme}
+                                    onClick={() =>
+                                      setThemeDraft({ kind: "saved", theme })
+                                    }
+                                    type="button"
+                                  >
+                                    <span
+                                      aria-hidden="true"
+                                      className="size-4 shrink-0 rounded-full border"
+                                      style={{
+                                        backgroundColor:
+                                          customTreePalette(theme).tiers[1],
+                                      }}
+                                    />
+                                    <span className="truncate">
+                                      {theme.name}
+                                    </span>
+                                    {activeFamily.custom_tree_theme_id ===
+                                      theme.id && (
+                                      <span className="ml-auto text-xs">
+                                        Applied
+                                      </span>
+                                    )}
+                                  </button>
+                                  <Button
+                                    aria-label={`Delete ${theme.name} theme`}
+                                    disabled={isSavingTreeTheme}
+                                    onClick={() =>
+                                      void deleteCustomTreeTheme(theme)
+                                    }
+                                    size="icon"
+                                    type="button"
+                                    variant="outline"
+                                  >
+                                    <Trash2 aria-hidden="true" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           <Button
                             disabled={isSavingTreeTheme}
-                            onClick={randomizeTreeTheme}
+                            onClick={() => {
+                              setThemeDraft({
+                                kind: "random",
+                                colors: randomTreeColors(),
+                              })
+                              setCustomThemeName(
+                                `Custom theme ${activeFamily.customThemes.length + 1}`
+                              )
+                            }}
                             type="button"
                             variant="outline"
                           >
                             <Shuffle aria-hidden="true" /> Random theme
                           </Button>
+                          {themeDraft?.kind === "random" && (
+                            <>
+                              {isAppliedRandomTheme(
+                                activeFamily,
+                                themeDraft.colors
+                              ) && (
+                                <p className="text-xs font-semibold">
+                                  This random theme is applied. Save it to keep
+                                  it in your library.
+                                </p>
+                              )}
+                              <form
+                                className="flex flex-wrap gap-2"
+                                onSubmit={(event) =>
+                                  void saveCustomTreeTheme(event)
+                                }
+                              >
+                                <Input
+                                  aria-label="Custom theme name"
+                                  className="min-w-0 flex-1"
+                                  disabled={
+                                    isSavingTreeTheme ||
+                                    activeFamily.customThemes.length >= 5
+                                  }
+                                  maxLength={40}
+                                  onChange={(event) =>
+                                    setCustomThemeName(event.target.value)
+                                  }
+                                  required
+                                  value={customThemeName}
+                                />
+                                <Button
+                                  disabled={
+                                    isSavingTreeTheme ||
+                                    activeFamily.customThemes.length >= 5
+                                  }
+                                  type="submit"
+                                  variant="outline"
+                                >
+                                  Save theme
+                                </Button>
+                              </form>
+                            </>
+                          )}
+                          <Button
+                            disabled={
+                              isSavingTreeTheme ||
+                              !themeDraft ||
+                              (themeDraft.kind === "preset" &&
+                                !activeFamily.custom_tree_theme_id &&
+                                activeFamily.custom_tree_hue === null &&
+                                themeDraft.theme === activeFamily.tree_theme) ||
+                              (themeDraft.kind === "saved" &&
+                                themeDraft.theme.id ===
+                                  activeFamily.custom_tree_theme_id) ||
+                              (themeDraft.kind === "random" &&
+                                isAppliedRandomTheme(
+                                  activeFamily,
+                                  themeDraft.colors
+                                ))
+                            }
+                            onClick={() => void applyTreeTheme()}
+                            type="button"
+                          >
+                            Apply theme
+                          </Button>
                           <p className="text-xs text-muted-foreground">
-                            Random chooses a coordinated palette. The tree theme
-                            is shared with every family member.
+                            {activeFamily.customThemes.length >= 5
+                              ? "You can apply a random theme now. Delete a saved theme to save another."
+                              : "Apply a random theme now and save it later. Each family can save up to five."}
                           </p>
                         </section>
                         <section className="space-y-2 border-t border-border pt-4">
@@ -1782,6 +2375,9 @@ export function FamilyDashboard({
                         type="button"
                       >
                         <Avatar className="size-20 sm:size-24">
+                          {member.avatar_photo && (
+                            <AvatarImage alt="" src={member.avatar_photo} />
+                          )}
                           <AvatarFallback
                             style={{ backgroundColor: member.avatar_color }}
                           >
@@ -1899,7 +2495,7 @@ export function FamilyDashboard({
                     <Input
                       aria-label="Family name"
                       className="h-11 rounded-lg px-3"
-                      maxLength={100}
+                      maxLength={FAMILY_NAME_LIMIT}
                       onChange={(event) => setFamilyName(event.target.value)}
                       placeholder="The North Pole crew"
                       required
@@ -1916,6 +2512,9 @@ export function FamilyDashboard({
                       value={familyYear}
                     />
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Family names can be up to {FAMILY_NAME_LIMIT} characters.
+                  </p>
                   <Button
                     className="rounded-lg bg-primary text-primary-foreground hover:bg-primary/80"
                     disabled={isSubmitting}
@@ -2127,16 +2726,49 @@ export function FamilyDashboard({
                           />
                         ))}
                       </div>
-                      <Button
-                        className="gap-2 rounded-lg"
-                        disabled
-                        title="Photo upload is coming soon"
-                        type="button"
-                        variant="outline"
-                      >
-                        <ImagePlus aria-hidden="true" className="size-4" />
-                        Use my photo (coming soon)
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Avatar className="size-16">
+                          {avatarPhoto && (
+                            <AvatarImage alt="" src={avatarPhoto} />
+                          )}
+                          <AvatarFallback
+                            style={{ backgroundColor: avatarColor }}
+                          >
+                            <AccountIcon
+                              aria-hidden="true"
+                              className="size-7 text-white"
+                            />
+                          </AvatarFallback>
+                        </Avatar>
+                        <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-lighter-black focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring hover:bg-muted">
+                          <ImagePlus aria-hidden="true" className="size-4" />
+                          {processingPhoto
+                            ? "Processing photo…"
+                            : "Choose photo"}
+                          <input
+                            accept="image/jpeg,image/png,image/webp"
+                            aria-label="Choose profile photo"
+                            className="sr-only"
+                            disabled={processingPhoto || isSubmitting}
+                            onChange={(event) => void choosePhoto(event)}
+                            type="file"
+                          />
+                        </label>
+                        {avatarPhoto && (
+                          <Button
+                            disabled={processingPhoto}
+                            onClick={() => setAvatarPhoto(null)}
+                            type="button"
+                            variant="outline"
+                          >
+                            Remove photo
+                          </Button>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        JPEG, PNG, or WebP up to 5 MB. Your photo is visible to
+                        your family. Save your profile to apply changes.
+                      </p>
                     </div>
                     <label className="flex items-center gap-2 text-sm text-lighter-black sm:col-span-2">
                       <input
@@ -2148,7 +2780,7 @@ export function FamilyDashboard({
                     </label>
                     <Button
                       className="w-fit rounded-lg"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || processingPhoto}
                       type="submit"
                       variant="outline"
                     >
@@ -2249,6 +2881,7 @@ export function FamilyDashboard({
                     loading={detailsFamilyId !== activeFamily.id}
                     refresh={() => refreshDetails(activeFamily.id)}
                     claimGift={claimGift}
+                    confirmPurchase={confirmPurchase}
                     releaseClaim={releaseClaim}
                     createTeamUp={createTeamUp}
                   />
@@ -2393,13 +3026,14 @@ export function FamilyDashboard({
                           <Input
                             aria-label="Purchase proof link"
                             className="h-10 min-w-0 rounded-lg px-2 text-sm"
+                            maxLength={2048}
                             onChange={(event) =>
                               setProofUrls((current) => ({
                                 ...current,
                                 [teamUp.id]: event.target.value,
                               }))
                             }
-                            placeholder="Purchase proof link"
+                            placeholder="HTTPS purchase proof link"
                             type="url"
                             value={proofUrls[teamUp.id] ?? ""}
                           />

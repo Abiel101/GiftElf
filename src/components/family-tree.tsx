@@ -2,13 +2,18 @@ import type { CSSProperties } from "react"
 import { Star } from "lucide-react"
 
 import type { AppTheme, AvatarIcon } from "@/lib/database.types"
-import { ORNAMENT_ICONS, PERSONAL_TREE_THEMES } from "@/lib/tree-theme"
+import {
+  ORNAMENT_ICONS,
+  PERSONAL_TREE_THEMES,
+  type TreeThemeDef,
+} from "@/lib/tree-theme"
 
 export type TreeMember = {
   id: string
   display_name: string
   avatar_color: string
   avatar_icon: AvatarIcon
+  avatar_photo?: string | null
   parentName?: string
 }
 
@@ -16,6 +21,8 @@ type FamilyTreeProps = {
   members: TreeMember[]
   currentUserId: string
   theme?: Exclude<AppTheme, "family">
+  palette?: TreeThemeDef
+  giftCount?: number
   onSelect: (memberId: string) => void
 }
 
@@ -74,9 +81,11 @@ export function FamilyTree({
   members,
   currentUserId,
   theme = "classic",
+  palette: customPalette,
+  giftCount = 0,
   onSelect,
 }: FamilyTreeProps) {
-  const palette = PERSONAL_TREE_THEMES[theme]
+  const palette = customPalette ?? PERSONAL_TREE_THEMES[theme]
   const rows = layoutRows(members.length)
   const top = 24
   const bottom = 86
@@ -90,12 +99,18 @@ export function FamilyTree({
         {
           "--tree-rows": rows.length,
           "--star-glow": palette.star,
+          "--trunk-color": palette.trunk,
+          "--gift-space": giftCount
+            ? `${Math.ceil(giftCount / 5) * 2.8 + 10}rem`
+            : "0rem",
         } as CSSProperties
       }
     >
+      <span aria-hidden="true" className="family-tree-shadow" />
+      <span aria-hidden="true" className="family-tree-trunk" />
       <svg
         aria-hidden="true"
-        className="absolute inset-0 h-full w-full"
+        className="family-tree-canopy"
         preserveAspectRatio="none"
         shapeRendering="crispEdges"
         viewBox="0 0 100 112"
@@ -109,7 +124,7 @@ export function FamilyTree({
                 const half = 6 + tier * 8 + step * 3
                 return (
                   <rect
-                    height="5"
+                    height={tier === 3 && step === 4 ? 24 : 5}
                     key={step}
                     width={half * 2}
                     x={50 - half}
@@ -120,7 +135,6 @@ export function FamilyTree({
             </g>
           )
         })}
-        <rect fill={palette.trunk} height="12" width="12" x="44" y="98" />
       </svg>
       {lightPositions.map(([x, y], index) => (
         <span
@@ -129,7 +143,7 @@ export function FamilyTree({
           key={`${x}-${y}`}
           style={{
             left: `${x}%`,
-            top: `${(y / 112) * 100}%`,
+            top: `calc((100% - var(--tree-base)) * ${y / 112})`,
             color: palette.lights[index % palette.lights.length],
             animationDelay: `${(index % 5) * -0.55}s`,
           }}
@@ -141,6 +155,29 @@ export function FamilyTree({
         strokeWidth={1.8}
         style={{ color: palette.starOutline, fill: palette.star }}
       />
+      <span className="sr-only" role="status">
+        {giftCount} {giftCount === 1 ? "purchased gift" : "purchased gifts"}{" "}
+        visible to you.
+      </span>
+      {giftCount > 0 && (
+        <div aria-hidden="true" className="family-tree-gifts">
+          {Array.from({ length: giftCount }, (_, index) => (
+            <span
+              className="family-tree-gift"
+              key={index}
+              style={
+                {
+                  "--gift-color":
+                    palette.presents[index % palette.presents.length],
+                  "--gift-ribbon": palette.presentRibbon,
+                } as CSSProperties
+              }
+            >
+              <span className="family-tree-gift-bow" />
+            </span>
+          ))}
+        </div>
+      )}
       {rows.map((rowSize, rowIndex) => {
         const y = rows.length === 1 ? 50 : top + rowIndex * rowGap
         const halfWidth = 10 + (y - 12) * 0.42
@@ -154,20 +191,31 @@ export function FamilyTree({
           return (
             <button
               aria-label={`${member.display_name}'s wish list${member.parentName ? `, child of ${member.parentName}` : ""}`}
-              className="family-ornament absolute flex min-h-11 min-w-11 -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
+              className="family-ornament absolute z-10 flex min-h-11 min-w-11 -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
               key={member.id}
               onClick={() => onSelect(member.id)}
-              style={{ left: `${x}%`, top: `${(y / 112) * 100}%` }}
+              style={{
+                left: `${x}%`,
+                top: `calc((100% - var(--tree-base)) * ${y / 112})`,
+              }}
               type="button"
             >
               <span
-                className="family-ornament-icon flex size-8 items-center justify-center sm:size-12"
+                className="family-ornament-icon flex size-8 items-center justify-center overflow-hidden sm:size-12"
                 style={{ backgroundColor: colorOf(member.avatar_color) }}
               >
-                <Icon
-                  aria-hidden="true"
-                  className="size-4 text-white sm:size-6"
-                />
+                {member.avatar_photo ? (
+                  <img
+                    alt=""
+                    className="size-full object-cover"
+                    src={member.avatar_photo}
+                  />
+                ) : (
+                  <Icon
+                    aria-hidden="true"
+                    className="size-4 text-white sm:size-6"
+                  />
+                )}
               </span>
               <span className="family-ornament-name max-w-24 truncate">
                 {member.id === currentUserId ? "You" : member.display_name}

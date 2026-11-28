@@ -47,6 +47,7 @@ type Props = {
   loading: boolean
   refresh: () => Promise<void>
   claimGift: (id: string) => Promise<void>
+  confirmPurchase: (id: string, proofUrl: string) => Promise<void>
   releaseClaim: (id: string) => Promise<void>
   createTeamUp: (id: string) => Promise<void>
 }
@@ -126,6 +127,7 @@ export function WishList({
   loading,
   refresh,
   claimGift,
+  confirmPurchase,
   releaseClaim,
   createTeamUp,
 }: Props) {
@@ -146,6 +148,8 @@ export function WishList({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [purchaseGiftId, setPurchaseGiftId] = useState<string | null>(null)
+  const [purchaseProof, setPurchaseProof] = useState("")
 
   const term = search.trim().toLowerCase()
   const filtered = gifts.filter(
@@ -724,18 +728,121 @@ export function WishList({
                             Edit
                           </Button>
                         ) : claim ? (
-                          claim.claimed_by === userId ? (
-                            <Button
-                              disabled={pendingId === gift.id}
-                              onClick={() => void releaseClaim(gift.id)}
-                              size="sm"
-                              variant="outline"
-                            >
-                              Undo claim
-                            </Button>
-                          ) : (
-                            "Already taken"
-                          )
+                          <div className="min-w-48 space-y-2">
+                            {claim.purchased_at ? (
+                              <>
+                                <span className="block text-sm font-semibold">
+                                  Purchased
+                                </span>
+                                {claim.purchase_proof_url && (
+                                  <a
+                                    className="block text-sm text-accent-red underline"
+                                    href={claim.purchase_proof_url}
+                                    rel="noreferrer"
+                                    target="_blank"
+                                  >
+                                    View purchase proof
+                                  </a>
+                                )}
+                                {teamUp && (
+                                  <NavLink
+                                    className="block text-sm text-accent-red underline"
+                                    to="/team-ups"
+                                  >
+                                    View team-up
+                                  </NavLink>
+                                )}
+                              </>
+                            ) : claim.claimed_by === userId ? (
+                              <>
+                                <span className="block text-sm">
+                                  Claimed by you
+                                </span>
+                                {purchaseGiftId === gift.id ? (
+                                  <form
+                                    className="space-y-2"
+                                    onSubmit={(event) => {
+                                      event.preventDefault()
+                                      void confirmPurchase(
+                                        gift.id,
+                                        purchaseProof
+                                      )
+                                    }}
+                                  >
+                                    <Input
+                                      aria-label={`Purchase proof link for ${gift.title}`}
+                                      maxLength={2048}
+                                      onChange={(event) =>
+                                        setPurchaseProof(event.target.value)
+                                      }
+                                      placeholder="https:// proof link"
+                                      required
+                                      type="url"
+                                      value={purchaseProof}
+                                    />
+                                    <div className="flex flex-wrap gap-1">
+                                      <Button
+                                        disabled={pendingId === gift.id}
+                                        size="sm"
+                                        type="submit"
+                                      >
+                                        Confirm purchase
+                                      </Button>
+                                      <Button
+                                        onClick={() => {
+                                          setPurchaseGiftId(null)
+                                          setPurchaseProof("")
+                                        }}
+                                        size="sm"
+                                        type="button"
+                                        variant="outline"
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </form>
+                                ) : (
+                                  <Button
+                                    disabled={pendingId === gift.id}
+                                    onClick={() => {
+                                      setPurchaseProof("")
+                                      setPurchaseGiftId(gift.id)
+                                    }}
+                                    size="sm"
+                                    type="button"
+                                  >
+                                    Mark purchased
+                                  </Button>
+                                )}
+                              </>
+                            ) : (
+                              <span className="block text-sm">
+                                Already taken
+                              </span>
+                            )}
+                            {claim.claimed_by === userId && !teamUp && (
+                              <Button
+                                disabled={pendingId === gift.id}
+                                onClick={() => {
+                                  if (
+                                    !claim.purchased_at ||
+                                    window.confirm(
+                                      "Remove this claim and its purchase confirmation?"
+                                    )
+                                  ) {
+                                    setPurchaseGiftId(null)
+                                    setPurchaseProof("")
+                                    void releaseClaim(gift.id)
+                                  }
+                                }}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                              >
+                                Undo claim
+                              </Button>
+                            )}
+                          </div>
                         ) : teamUp ? (
                           <NavLink
                             className="text-accent-red underline"

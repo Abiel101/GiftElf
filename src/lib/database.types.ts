@@ -32,6 +32,7 @@ export type Database = {
           display_name: string
           avatar_color: string
           avatar_icon: AvatarIcon
+          avatar_photo: string | null
           favorite_items: string[]
           things_they_like: string[]
           created_at: string
@@ -41,6 +42,7 @@ export type Database = {
           display_name: string
           avatar_color?: string
           avatar_icon?: AvatarIcon
+          avatar_photo?: string | null
           favorite_items?: string[]
           things_they_like?: string[]
           created_at?: string
@@ -50,6 +52,7 @@ export type Database = {
           display_name?: string
           avatar_color?: string
           avatar_icon?: AvatarIcon
+          avatar_photo?: string | null
           favorite_items?: string[]
           things_they_like?: string[]
           created_at?: string
@@ -81,6 +84,9 @@ export type Database = {
           name: string
           year: number
           tree_theme: TreeTheme
+          custom_tree_theme_id: string | null
+          custom_tree_hue: number | null
+          custom_tree_accent_hue: number | null
           created_by: string
           created_at: string
         },
@@ -89,7 +95,28 @@ export type Database = {
           name: string
           year: number
           tree_theme?: TreeTheme
+          custom_tree_theme_id?: string | null
+          custom_tree_hue?: number | null
+          custom_tree_accent_hue?: number | null
           created_by: string
+          created_at?: string
+        }
+      >
+      family_tree_custom_themes: Table<
+        {
+          id: string
+          family_id: string
+          name: string
+          hue: number
+          accent_hue: number
+          created_at: string
+        },
+        {
+          id?: string
+          family_id: string
+          name: string
+          hue: number
+          accent_hue: number
           created_at?: string
         }
       >
@@ -213,12 +240,16 @@ export type Database = {
           family_id: string
           claimed_by: string
           claimed_at: string
+          purchased_at: string | null
+          purchase_proof_url: string | null
         },
         {
           gift_id: string
           family_id: string
           claimed_by: string
           claimed_at?: string
+          purchased_at?: string | null
+          purchase_proof_url?: string | null
         }
       >
       team_ups: Table<
@@ -268,6 +299,10 @@ export type Database = {
       claim_gift: { Args: { p_gift_id: string }; Returns: undefined }
       complete_team_up: {
         Args: { p_team_up_id: string; p_purchase_proof_url: string }
+        Returns: undefined
+      }
+      confirm_gift_purchase: {
+        Args: { p_gift_id: string; p_purchase_proof_url: string }
         Returns: undefined
       }
       create_family: {
