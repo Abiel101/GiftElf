@@ -310,6 +310,7 @@ export function FamilyDashboard({
   const listOwnerId = ownerId ?? user.id
   const [category, setCategory] = useState<GiftCategory>("want")
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all")
+  const [inviteTargets, setInviteTargets] = useState<Record<string, string>>({})
   const [proofUrls, setProofUrls] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -825,7 +826,7 @@ export function FamilyDashboard({
         p_gift_id: giftId,
       })
       if (error) throw new Error(error.message)
-      setNotice("Team-up created. Other family members can join.")
+      setNotice("Team-up created. Invite family members from the Team-ups tab.")
       if (activeFamilyId) await refreshDetails(activeFamilyId)
     } catch (error) {
       reportError(error)
@@ -834,16 +835,36 @@ export function FamilyDashboard({
     }
   }
 
-  async function joinTeamUp(teamUpId: string) {
+  async function confirmTeamUp(teamUpId: string) {
     setPendingId(teamUpId)
     setErrorMessage("")
     try {
-      const { error } = await client.rpc("join_team_up", {
+      const { error } = await client.rpc("confirm_team_up", {
         p_team_up_id: teamUpId,
-        p_pledge: null,
       })
       if (error) throw new Error(error.message)
-      setNotice("You joined the team-up.")
+      setNotice("You're on the team-up.")
+      if (activeFamilyId) await refreshDetails(activeFamilyId)
+    } catch (error) {
+      reportError(error)
+    } finally {
+      setPendingId("")
+    }
+  }
+
+  async function inviteToTeamUp(teamUpId: string) {
+    const userId = inviteTargets[teamUpId]
+    if (!userId) return
+    setPendingId(teamUpId)
+    setErrorMessage("")
+    try {
+      const { error } = await client.rpc("invite_to_team_up", {
+        p_team_up_id: teamUpId,
+        p_user_id: userId,
+      })
+      if (error) throw new Error(error.message)
+      setInviteTargets((current) => ({ ...current, [teamUpId]: "" }))
+      setNotice("Invitation sent. They'll see the team-up once they log in.")
       if (activeFamilyId) await refreshDetails(activeFamilyId)
     } catch (error) {
       reportError(error)
@@ -1501,14 +1522,6 @@ export function FamilyDashboard({
                       const claim = claimsByGift.get(gift.id)
                       const teamUp = teamUpByGift.get(gift.id)
                       const isOwner = gift.owner_id === user.id
-                      const isParticipant = Boolean(
-                        teamUp &&
-                        details.teamUpMembers.some(
-                          (member) =>
-                            member.team_up_id === teamUp.id &&
-                            member.user_id === user.id
-                        )
-                      )
                       return (
                         <article
                           className="space-y-3 rounded-xl border border-border bg-white p-4 shadow-sm"
@@ -1631,74 +1644,15 @@ export function FamilyDashboard({
                               </p>
                             )
                           ) : teamUp ? (
-                            <div className="space-y-2 rounded-lg bg-[#f3f8f4] p-3 text-sm">
-                              <p className="font-semibold text-lighter-black">
-                                {teamUp.status === "funded"
-                                  ? "Purchased"
-                                  : "Team-up"}{" "}
-                                ·{" "}
-                                {
-                                  details.teamUpMembers.filter(
-                                    (member) => member.team_up_id === teamUp.id
-                                  ).length
-                                }{" "}
-                                joined
-                                {gift.price !== null &&
-                                  details.teamUpMembers.some(
-                                    (member) => member.team_up_id === teamUp.id
-                                  ) &&
-                                  ` · about $${(Number(gift.price) / Math.max(1, details.teamUpMembers.filter((member) => member.team_up_id === teamUp.id).length)).toFixed(2)} each`}
-                              </p>
-                              {teamUp.status === "open" && !isParticipant && (
-                                <Button
-                                  className="w-full rounded-lg"
-                                  disabled={pendingId === teamUp.id}
-                                  onClick={() => void joinTeamUp(teamUp.id)}
-                                  variant="outline"
-                                >
-                                  Join team-up
-                                </Button>
-                              )}
-                              {teamUp.status === "open" && isParticipant && (
-                                <form
-                                  className="flex gap-2"
-                                  onSubmit={(event) =>
-                                    void completeTeamUp(event, teamUp.id)
-                                  }
-                                >
-                                  <Input
-                                    aria-label="Purchase proof link"
-                                    className="h-10 min-w-0 rounded-lg bg-white px-2 text-sm"
-                                    onChange={(event) =>
-                                      setProofUrls((current) => ({
-                                        ...current,
-                                        [teamUp.id]: event.target.value,
-                                      }))
-                                    }
-                                    placeholder="Purchase proof link"
-                                    type="url"
-                                    value={proofUrls[teamUp.id] ?? ""}
-                                  />
-                                  <Button
-                                    className="rounded-lg"
-                                    disabled={pendingId === teamUp.id}
-                                    type="submit"
-                                  >
-                                    Purchased
-                                  </Button>
-                                </form>
-                              )}
-                              {teamUp.purchase_proof_url && (
-                                <a
-                                  className="text-accent-red underline"
-                                  href={teamUp.purchase_proof_url}
-                                  rel="noreferrer"
-                                  target="_blank"
-                                >
-                                  View purchase proof
-                                </a>
-                              )}
-                            </div>
+                            <NavLink
+                              className="block rounded-lg bg-[#f3f8f4] p-3 text-center text-sm font-semibold text-lighter-black"
+                              to="/team-ups"
+                            >
+                              {teamUp.status === "funded"
+                                ? "Purchased by a team-up"
+                                : "Team-up in progress"}{" "}
+                              · Open Team-ups
+                            </NavLink>
                           ) : (
                             <div className="flex gap-2">
                               <Button
@@ -1754,7 +1708,7 @@ export function FamilyDashboard({
           </div>
           {myTeamUps.length === 0 ? (
             <p className="rounded-xl bg-[#f8f8f8] p-5 text-sm text-muted-foreground">
-              No team-ups yet. Start one from a gift priced at $60 or more.
+              No team-ups yet. You'll see one here when someone invites you.
             </p>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
@@ -1763,15 +1717,19 @@ export function FamilyDashboard({
                   (item) => item.id === teamUp.gift_id
                 )
                 if (!gift) return null
-                const participants = details.teamUpMembers
-                  .filter((member) => member.team_up_id === teamUp.id)
-                  .map((member) => memberById.get(member.user_id)?.display_name)
-                  .filter((name): name is string => Boolean(name))
-                const participantCount = participants.length
-                const isParticipant = details.teamUpMembers.some(
+                const rows = details.teamUpMembers.filter(
+                  (member) => member.team_up_id === teamUp.id
+                )
+                const nameOf = (id: string) =>
+                  memberById.get(id)?.display_name ?? "Family member"
+                const confirmed = rows.filter((row) => row.confirmed_at)
+                const pending = rows.filter((row) => !row.confirmed_at)
+                const myRow = rows.find((row) => row.user_id === user.id)
+                const isConfirmed = Boolean(myRow?.confirmed_at)
+                const invitable = details.members.filter(
                   (member) =>
-                    member.team_up_id === teamUp.id &&
-                    member.user_id === user.id
+                    member.id !== gift.owner_id &&
+                    !rows.some((row) => row.user_id === member.id)
                 )
                 return (
                   <article
@@ -1782,59 +1740,98 @@ export function FamilyDashboard({
                       <div>
                         <h3 className="font-semibold">{gift.title}</h3>
                         <p className="text-sm text-muted-foreground">
-                          Wanted by{" "}
-                          {memberById.get(gift.owner_id)?.display_name ??
-                            "family member"}{" "}
-                          · {participantCount} joined
+                          Wanted by {nameOf(gift.owner_id)} · {confirmed.length}{" "}
+                          confirmed
                         </p>
                       </div>
                       <span className="rounded-full bg-[#fff3d4] px-3 py-1 text-sm font-semibold">
-                        {teamUp.status === "funded" ? "Purchased" : "Open"}
+                        {teamUp.status === "funded"
+                          ? "Purchased"
+                          : isConfirmed
+                            ? "Open"
+                            : "Invited"}
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Joined by: {participants.join(", ") || "No one yet"}
+                      In:{" "}
+                      {confirmed.map((row) => nameOf(row.user_id)).join(", ")}
+                      {pending.length > 0 &&
+                        ` · Waiting on: ${pending.map((row) => nameOf(row.user_id)).join(", ")}`}
                       {gift.price !== null &&
-                        ` · about $${(Number(gift.price) / Math.max(1, participantCount)).toFixed(2)} per person`}
+                        ` · about $${(Number(gift.price) / Math.max(1, confirmed.length)).toFixed(2)} per person`}
                     </p>
-                    {teamUp.status === "open" && !isParticipant && (
+                    {teamUp.status === "open" && !isConfirmed && (
                       <Button
-                        className="rounded-lg"
+                        className="w-full rounded-lg bg-accent-red text-white hover:bg-[#e23e46]"
                         disabled={pendingId === teamUp.id}
-                        onClick={() => void joinTeamUp(teamUp.id)}
-                        variant="outline"
+                        onClick={() => void confirmTeamUp(teamUp.id)}
                       >
-                        Join team-up
+                        Confirm I&apos;m in
                       </Button>
                     )}
-                    {teamUp.status === "open" && isParticipant && (
-                      <form
-                        className="flex gap-2"
-                        onSubmit={(event) =>
-                          void completeTeamUp(event, teamUp.id)
-                        }
-                      >
-                        <Input
-                          aria-label="Purchase proof link"
-                          className="h-10 min-w-0 rounded-lg px-2 text-sm"
-                          onChange={(event) =>
-                            setProofUrls((current) => ({
-                              ...current,
-                              [teamUp.id]: event.target.value,
-                            }))
+                    {teamUp.status === "open" && isConfirmed && (
+                      <>
+                        {invitable.length > 0 && (
+                          <div className="flex gap-2">
+                            <select
+                              aria-label="Invite a family member"
+                              className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-white px-2 text-sm"
+                              onChange={(event) =>
+                                setInviteTargets((current) => ({
+                                  ...current,
+                                  [teamUp.id]: event.target.value,
+                                }))
+                              }
+                              value={inviteTargets[teamUp.id] ?? ""}
+                            >
+                              <option value="">Invite someone…</option>
+                              {invitable.map((member) => (
+                                <option key={member.id} value={member.id}>
+                                  {member.display_name}
+                                </option>
+                              ))}
+                            </select>
+                            <Button
+                              className="rounded-lg"
+                              disabled={
+                                pendingId === teamUp.id ||
+                                !inviteTargets[teamUp.id]
+                              }
+                              onClick={() => void inviteToTeamUp(teamUp.id)}
+                              variant="outline"
+                            >
+                              Invite
+                            </Button>
+                          </div>
+                        )}
+                        <form
+                          className="flex gap-2"
+                          onSubmit={(event) =>
+                            void completeTeamUp(event, teamUp.id)
                           }
-                          placeholder="Purchase proof link"
-                          type="url"
-                          value={proofUrls[teamUp.id] ?? ""}
-                        />
-                        <Button
-                          className="rounded-lg"
-                          disabled={pendingId === teamUp.id}
-                          type="submit"
                         >
-                          Mark purchased
-                        </Button>
-                      </form>
+                          <Input
+                            aria-label="Purchase proof link"
+                            className="h-10 min-w-0 rounded-lg px-2 text-sm"
+                            onChange={(event) =>
+                              setProofUrls((current) => ({
+                                ...current,
+                                [teamUp.id]: event.target.value,
+                              }))
+                            }
+                            placeholder="Purchase proof link"
+                            type="url"
+                            value={proofUrls[teamUp.id] ?? ""}
+                          />
+                          <Button
+                            className="rounded-lg"
+                            disabled={pendingId === teamUp.id}
+                            type="submit"
+                          >
+                            Mark purchased
+                          </Button>
+                        </form>
+                      </>
                     )}
                     {teamUp.purchase_proof_url && (
                       <a

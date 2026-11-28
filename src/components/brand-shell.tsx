@@ -1,64 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { Sparkles } from "lucide-react"
 
+import { PixelElf, PixelLogo, PixelTree } from "@/components/pixel-art"
+
 type BrandShellProps = {
   children: ReactNode
   variant?: "landing" | "app"
-}
-
-function ElfMascot({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      viewBox="0 0 220 220"
-    >
-      <circle cx="110" cy="110" r="104" fill="#FFF7EF" />
-      <circle
-        cx="110"
-        cy="110"
-        r="101"
-        stroke="#FFC94D"
-        strokeOpacity=".7"
-        strokeWidth="3"
-      />
-      <path d="m51 113-23-8 15 26 15 8m96-26 23-8-15 26-15 8" fill="#F5B73B" />
-      <path
-        d="M56 77c0-30 24-53 54-53s54 23 54 53v49c0 34-24 58-54 58s-54-24-54-58V77Z"
-        fill="#F2B986"
-      />
-      <path
-        d="M56 108c12-7 19-17 22-29 12 13 34 19 74 13 2 12 6 21 12 27V75c0-31-24-55-54-55S56 44 56 75v33Z"
-        fill="#1F8F6B"
-      />
-      <path
-        d="M47 75c21-3 43-16 62-49 14 29 34 42 65 43l-8 20c-32 4-59-5-78-21-9 13-21 22-37 27l-4-20Z"
-        fill="#3BB78F"
-      />
-      <path
-        d="M49 73c20-4 42-16 60-47 15 28 35 41 63 42"
-        stroke="#FFF7EF"
-        strokeLinecap="round"
-        strokeWidth="7"
-      />
-      <path d="m110 20 9-10 10 5-2 12-10 4-8-11Z" fill="#FFC94D" />
-      <path
-        d="M85 113c5-5 11-5 16 0m18 0c5-5 11-5 16 0"
-        stroke="#50352B"
-        strokeLinecap="round"
-        strokeWidth="5"
-      />
-      <path
-        d="M99 143c7 7 15 7 22 0"
-        stroke="#A33F3C"
-        strokeLinecap="round"
-        strokeWidth="5"
-      />
-      <path d="m76 162 34 22 34-22-9 36h-50l-9-36Z" fill="#FF4F58" />
-      <path d="m102 175 8 9 8-9-8-8-8 8Z" fill="#FFC94D" />
-    </svg>
-  )
 }
 
 export function BrandShell({ children, variant = "landing" }: BrandShellProps) {
@@ -101,21 +48,15 @@ function LandingShell({ children }: { children: ReactNode }) {
           <div className="intro-stage absolute inset-0 overflow-hidden">
             <div className="absolute inset-x-0 top-[8dvh] z-10 flex justify-center">
               <div className="intro-lockup flex items-center gap-3">
-                <h1 className="font-sans text-5xl font-black tracking-[-0.07em] drop-shadow-[0_4px_16px_rgba(80,0,8,0.3)] sm:text-6xl">
-                  Gift<span className="text-[#ffe18b]">Elf</span>
+                <h1 className="drop-shadow-[0_4px_16px_rgba(80,0,8,0.3)]">
+                  <span className="sr-only">GiftElf</span>
+                  <PixelLogo className="h-9 w-auto sm:h-12" />
                 </h1>
                 <Sparkles className="intro-sparkle size-6 text-[#ffe18b]" />
               </div>
             </div>
             <div className="intro-tree absolute bottom-0 left-1/2 z-10 -translate-x-1/2">
-              {[1, 2, 3].map((tier) => (
-                <img
-                  alt=""
-                  className={`intro-tree-tier intro-tree-tier--${tier}`}
-                  key={tier}
-                  src="/img/ChristmasTree.png"
-                />
-              ))}
+              <PixelTree className="block h-auto w-full" />
             </div>
           </div>
         </div>
@@ -128,11 +69,12 @@ function LandingShell({ children }: { children: ReactNode }) {
         <header className="brand-panel relative isolate flex min-h-56 items-center justify-center overflow-hidden px-5 py-6 text-white sm:min-h-72 sm:px-6 sm:py-10 lg:min-h-dvh lg:px-12 xl:px-20">
           <div className="relative flex max-w-xl flex-col items-center text-center">
             <div className="flex items-center gap-3 sm:flex-col sm:gap-0">
-              <div className="elf-mascot-enter mb-0 shrink-0 rounded-full bg-white/10 p-1 ring-1 ring-white/25 sm:mb-5 sm:p-1.5">
-                <ElfMascot className="size-12 sm:size-20 lg:size-24" />
+              <div className="elf-mascot-enter mb-0 shrink-0 sm:mb-5">
+                <PixelElf className="h-14 w-auto sm:h-24 lg:h-28" />
               </div>
-              <h1 className="text-4xl leading-none font-black tracking-[-0.075em] sm:text-6xl lg:text-7xl">
-                Gift<span className="text-[#ffe18b]">Elf</span>
+              <h1>
+                <span className="sr-only">GiftElf</span>
+                <PixelLogo className="h-8 w-auto drop-shadow-[0_3px_0_rgba(80,0,8,0.35)] sm:h-12 lg:h-14" />
               </h1>
             </div>
             <p className="mt-2 text-sm font-semibold text-white/90 sm:mt-3 sm:text-lg">

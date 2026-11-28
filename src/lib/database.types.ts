@@ -188,12 +188,14 @@ export type Database = {
           user_id: string
           pledge: number | null
           joined_at: string
+          confirmed_at: string | null
         },
         {
           team_up_id: string
           user_id: string
           pledge?: number | null
           joined_at?: string
+          confirmed_at?: string | null
         }
       >
     }
@@ -228,6 +230,15 @@ export type Database = {
       }
       is_family_member: { Args: { p_family_id: string }; Returns: boolean }
       is_family_owner: { Args: { p_family_id: string }; Returns: boolean }
+      confirm_team_up: { Args: { p_team_up_id: string }; Returns: undefined }
+      invite_to_team_up: {
+        Args: { p_team_up_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      is_team_up_invitee: {
+        Args: { p_team_up_id: string }
+        Returns: boolean
+      }
       is_team_up_participant: {
         Args: { p_team_up_id: string }
         Returns: boolean
@@ -241,10 +252,6 @@ export type Database = {
           invite_code: string
           invite_code_expires_at: string
         }[]
-      }
-      join_team_up: {
-        Args: { p_team_up_id: string; p_pledge?: number | null }
-        Returns: undefined
       }
       release_gift_claim: { Args: { p_gift_id: string }; Returns: undefined }
     }
