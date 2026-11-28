@@ -10,6 +10,8 @@ import {
   Copy,
   ExternalLink,
   Gift,
+  ImagePlus,
+  Pencil,
   Plus,
   Trash2,
   Users,
@@ -22,7 +24,14 @@ import { FamilyTree } from "@/components/family-tree"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { gifts as originalWishList } from "@/data/gifts"
-import type { Database, GiftCategory } from "@/lib/database.types"
+import type {
+  AvatarIcon,
+  Database,
+  GiftCategory,
+  TreeTheme,
+} from "@/lib/database.types"
+import { fetchLinkPreview } from "@/lib/link-preview"
+import { ORNAMENT_COLORS, ORNAMENT_ICONS, TREE_THEMES } from "@/lib/tree-theme"
 import type { GiftElfSupabaseClient } from "@/lib/supabase"
 
 type FamilyRow = Database["public"]["Tables"]["families"]["Row"]
@@ -36,7 +45,12 @@ type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"]
 type FamilySummary = FamilyRow & Pick<MemberRow, "role">
 type FamilyProfile = Pick<
   ProfileRow,
-  "id" | "display_name" | "avatar_color" | "favorite_items" | "things_they_like"
+  | "id"
+  | "display_name"
+  | "avatar_color"
+  | "avatar_icon"
+  | "favorite_items"
+  | "things_they_like"
 > & { role: MemberRow["role"]; age_label: string | null }
 type FamilyDetails = {
   gifts: GiftRow[]
@@ -46,7 +60,7 @@ type FamilyDetails = {
   teamUps: TeamUpRow[]
   teamUpMembers: TeamUpMemberRow[]
 }
-type DashboardView = "tree" | "family" | "list" | "team-ups"
+type DashboardView = "tree" | "family" | "profile" | "list" | "team-ups"
 type PriceFilter = "all" | "under25" | "25to50" | "50to100" | "100plus"
 type GiftForm = {
   title: string
@@ -205,7 +219,9 @@ async function fetchFamilyDetails(
   const memberIds = memberResult.data.map((member) => member.user_id)
   const { data: profiles, error: profileError } = await client
     .from("profiles")
-    .select("id,display_name,avatar_color,favorite_items,things_they_like")
+    .select(
+      "id,display_name,avatar_color,avatar_icon,favorite_items,things_they_like"
+    )
     .in("id", memberIds)
   if (profileError) throw new Error(profileError.message)
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]))
@@ -273,19 +289,24 @@ export function FamilyDashboard({
   const [inviteCode, setInviteCode] = useState(
     () => new URLSearchParams(window.location.search).get("join") ?? ""
   )
-  const [inviteName, setInviteName] = useState("")
-  const [inviteEmail, setInviteEmail] = useState("")
+  const [avatarColor, setAvatarColor] = useState(ORNAMENT_COLORS[0])
+  const [avatarIcon, setAvatarIcon] = useState<AvatarIcon>("gift")
+  const [editingGiftId, setEditingGiftId] = useState("")
+  const [editTitle, setEditTitle] = useState("")
   const [giftForm, setGiftForm] = useState<GiftForm>(blankGift)
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const { ownerId } = useParams()
-  const view: DashboardView = pathname.startsWith("/list")
-    ? "list"
-    : pathname.startsWith("/team-ups")
-      ? "team-ups"
-      : pathname.startsWith("/family")
-        ? "family"
-        : "tree"
+  const view: DashboardView =
+    pathname.startsWith("/list") || pathname.startsWith("/profile/list")
+      ? "list"
+      : pathname.startsWith("/profile")
+        ? "profile"
+        : pathname.startsWith("/team-ups")
+          ? "team-ups"
+          : pathname.startsWith("/family")
+            ? "family"
+            : "tree"
   const listOwnerId = ownerId ?? user.id
   const [category, setCategory] = useState<GiftCategory>("want")
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all")
@@ -309,6 +330,18 @@ export function FamilyDashboard({
     () => new Map(details.teamUps.map((teamUp) => [teamUp.gift_id, teamUp])),
     [details.teamUps]
   )
+
+  const myTeamUps = details.teamUps.filter((teamUp) =>
+    details.teamUpMembers.some(
+      (member) => member.team_up_id === teamUp.id && member.user_id === user.id
+    )
+  )
+  const isOwnProfileArea =
+    view === "profile" || (view === "list" && listOwnerId === user.id)
+  const showTeamUpsTab =
+    Boolean(activeFamily) &&
+    myTeamUps.length > 0 &&
+    appStartedAt <= new Date(activeFamily?.year ?? 0, 11, 25, 23, 59).getTime()
 
   function clearFamilyDetails() {
     setDetails({
@@ -343,7 +376,9 @@ export function FamilyDashboard({
     Promise.all([
       client
         .from("profiles")
-        .select("display_name,favorite_items,things_they_like")
+        .select(
+          "display_name,avatar_color,avatar_icon,favorite_items,things_they_like"
+        )
         .eq("id", user.id)
         .maybeSingle(),
       client
@@ -360,6 +395,8 @@ export function FamilyDashboard({
         setDisplayName(
           profileResult.data?.display_name ?? user.email?.split("@")[0] ?? ""
         )
+        setAvatarColor(profileResult.data?.avatar_color ?? ORNAMENT_COLORS[0])
+        setAvatarIcon(profileResult.data?.avatar_icon ?? "gift")
         setFavoriteItems(profileResult.data?.favorite_items.join(", ") ?? "")
         setThingsTheyLike(profileResult.data?.things_they_like.join(", ") ?? "")
         setBirthYear(privateResult.data?.birth_year?.toString() ?? "")
@@ -492,7 +529,13 @@ export function FamilyDashboard({
         p_name: familyName.trim(),
         p_year: Number(familyYear),
       })
-      if (error) throw new Error(error.message)
+      if (error) {
+        throw new Error(
+          error.code === "23505"
+            ? "A family with that name already exists for this year. Pick a different name."
+            : error.message
+        )
+      }
       const created = data[0]
       if (!created) throw new Error("Supabase did not return the new family.")
       await refreshFamilies()
@@ -551,6 +594,8 @@ export function FamilyDashboard({
         .from("profiles")
         .update({
           display_name: displayName.trim(),
+          avatar_color: avatarColor,
+          avatar_icon: avatarIcon,
           favorite_items: favoriteItems
             .split(",")
             .map((item) => item.trim())
@@ -576,29 +621,47 @@ export function FamilyDashboard({
     }
   }
 
-  async function createInvite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!activeFamily) return
-    setIsSubmitting(true)
+  async function updateTreeTheme(theme: TreeTheme) {
+    if (!activeFamily || activeFamily.role !== "owner") return
     setErrorMessage("")
-    setNotice("")
-    try {
-      const { error } = await client.rpc("create_family_invite", {
-        p_family_id: activeFamily.id,
-        p_display_name: inviteName.trim(),
-        p_email: inviteEmail.trim(),
-      })
-      if (error) throw new Error(error.message)
-      setInviteName("")
-      setInviteEmail("")
-      setNotice(
-        "Pending family member added. Share the family code so they can join."
+    const { error } = await client
+      .from("families")
+      .update({ tree_theme: theme })
+      .eq("id", activeFamily.id)
+    if (error) {
+      reportError(new Error(error.message))
+      return
+    }
+    setFamilies((current) =>
+      current.map((family) =>
+        family.id === activeFamily.id
+          ? { ...family, tree_theme: theme }
+          : family
       )
+    )
+    setNotice("Tree theme updated for everyone in the family.")
+  }
+
+  async function renameGift(giftId: string) {
+    const title = editTitle.trim()
+    if (!title || !activeFamily) {
+      setEditingGiftId("")
+      return
+    }
+    setPendingId(giftId)
+    try {
+      const { error } = await client
+        .from("gifts")
+        .update({ title })
+        .eq("id", giftId)
+        .eq("owner_id", user.id)
+      if (error) throw new Error(error.message)
+      setEditingGiftId("")
       await refreshDetails(activeFamily.id)
     } catch (error) {
       reportError(error)
     } finally {
-      setIsSubmitting(false)
+      setPendingId("")
     }
   }
 
@@ -631,10 +694,17 @@ export function FamilyDashboard({
     setErrorMessage("")
     setNotice("")
     try {
+      const preview = url
+        ? await fetchLinkPreview(client, url)
+        : { title: null, image: null }
+      const title =
+        giftForm.title.trim() || preview.title || storeFromUrl(url ?? "") || ""
+      if (!title) throw new Error("Add a name or a product link.")
       const { error } = await client.from("gifts").insert({
         family_id: activeFamily.id,
         owner_id: user.id,
-        title: giftForm.title.trim(),
+        title,
+        image_url: preview.image,
         url,
         store: storeFromUrl(url ?? ""),
         price,
@@ -869,7 +939,7 @@ export function FamilyDashboard({
         <div className="flex gap-2">
           <Button
             className="rounded-lg"
-            onClick={() => navigate("/family")}
+            onClick={() => navigate("/profile")}
             variant="outline"
           >
             Profile
@@ -901,21 +971,23 @@ export function FamilyDashboard({
           Family
         </NavLink>
         <NavLink
-          className={() => navClass(view === "list" && listOwnerId === user.id)}
-          onClick={() => {
-            setCategory("want")
-            setPriceFilter("all")
-          }}
-          to="/list"
+          className={() =>
+            navClass(
+              view === "profile" || (view === "list" && listOwnerId === user.id)
+            )
+          }
+          to="/profile"
         >
-          My List
+          Profile
         </NavLink>
-        <NavLink
-          className={({ isActive }) => navClass(isActive)}
-          to="/team-ups"
-        >
-          Team-ups
-        </NavLink>
+        {showTeamUpsTab && (
+          <NavLink
+            className={({ isActive }) => navClass(isActive)}
+            to="/team-ups"
+          >
+            Team-ups
+          </NavLink>
+        )}
       </nav>
 
       {view === "tree" && (
@@ -931,6 +1003,7 @@ export function FamilyDashboard({
               <FamilyTree
                 currentUserId={user.id}
                 members={details.members}
+                theme={activeFamily?.tree_theme}
                 onSelect={openList}
               />
             </>
@@ -1023,69 +1096,6 @@ export function FamilyDashboard({
             </form>
           </div>
 
-          <form
-            className="grid gap-3 rounded-2xl bg-white p-5 shadow-lg sm:grid-cols-2"
-            onSubmit={saveProfile}
-          >
-            <div className="sm:col-span-2">
-              <h2 className="text-xl font-bold text-lighter-black">
-                Your profile
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Your birth year stays private; sharing an age label is optional.
-              </p>
-            </div>
-            <Input
-              aria-label="Display name"
-              className="h-11 rounded-lg px-3"
-              maxLength={80}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="Display name"
-              required
-              value={displayName}
-            />
-            <Input
-              aria-label="Birth year"
-              className="h-11 rounded-lg px-3"
-              max={new Date().getFullYear()}
-              min={1900}
-              onChange={(event) => setBirthYear(event.target.value)}
-              placeholder="Birth year (optional)"
-              type="number"
-              value={birthYear}
-            />
-            <Input
-              aria-label="Favorite items"
-              className="h-11 rounded-lg px-3"
-              onChange={(event) => setFavoriteItems(event.target.value)}
-              placeholder="Favorite items (comma separated)"
-              value={favoriteItems}
-            />
-            <Input
-              aria-label="Things you like"
-              className="h-11 rounded-lg px-3"
-              onChange={(event) => setThingsTheyLike(event.target.value)}
-              placeholder="Things you like (comma separated)"
-              value={thingsTheyLike}
-            />
-            <label className="flex items-center gap-2 text-sm text-lighter-black sm:col-span-2">
-              <input
-                checked={shareAge}
-                onChange={(event) => setShareAge(event.target.checked)}
-                type="checkbox"
-              />
-              Share an approximate age with family members
-            </label>
-            <Button
-              className="w-fit rounded-lg"
-              disabled={isSubmitting}
-              type="submit"
-              variant="outline"
-            >
-              Save profile
-            </Button>
-          </form>
-
           {isLoading ? (
             <p className="rounded-xl bg-white p-6 text-sm text-muted-foreground">
               Loading your families…
@@ -1140,87 +1150,32 @@ export function FamilyDashboard({
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-4">
-                {details.members.map((member) => (
-                  <button
-                    aria-label={`View ${member.display_name}'s wish list${member.age_label ? `, ${member.age_label}` : ""}`}
-                    className="flex w-24 flex-col items-center gap-2 rounded-xl p-3 text-center transition hover:bg-[#fff3f3]"
-                    key={member.id}
-                    onClick={() => openList(member.id)}
-                    type="button"
-                  >
-                    <span
-                      className="flex size-16 items-center justify-center rounded-full border-4 border-white text-xl font-bold text-white shadow"
-                      style={{ backgroundColor: member.avatar_color }}
+              <div className="space-y-2 border-t border-border pt-5">
+                <h3 className="font-semibold text-lighter-black">Tree theme</h3>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(TREE_THEMES) as TreeTheme[]).map((key) => (
+                    <button
+                      aria-pressed={activeFamily.tree_theme === key}
+                      className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-60 ${activeFamily.tree_theme === key ? "border-accent-red ring-2 ring-accent-red/30" : "border-border"}`}
+                      disabled={activeFamily.role !== "owner"}
+                      key={key}
+                      onClick={() => void updateTreeTheme(key)}
+                      type="button"
                     >
-                      {member.display_name.slice(0, 1).toUpperCase()}
-                    </span>
-                    <span className="text-sm font-semibold text-lighter-black">
-                      {member.display_name}
-                    </span>
-                    {member.age_label && (
-                      <span className="text-xs text-muted-foreground">
-                        {member.age_label}
-                      </span>
-                    )}
-                    <span
-                      className="size-2 rounded-full bg-green-500"
-                      aria-label="Joined"
-                    />
-                  </button>
-                ))}
-                {details.invites.map((invite) => (
-                  <div
-                    className="flex w-24 flex-col items-center gap-2 p-3 text-center opacity-60"
-                    key={invite.id}
-                  >
-                    <span className="flex size-16 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground text-xl text-muted-foreground">
-                      {invite.display_name.slice(0, 1).toUpperCase()}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      {invite.display_name}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Pending
-                    </span>
-                  </div>
-                ))}
+                      <span
+                        className="size-4 rounded-full border"
+                        style={{ backgroundColor: TREE_THEMES[key].tiers[1] }}
+                      />
+                      {TREE_THEMES[key].label}
+                    </button>
+                  ))}
+                </div>
+                {activeFamily.role !== "owner" && (
+                  <p className="text-xs text-muted-foreground">
+                    Only the family creator can change the tree theme.
+                  </p>
+                )}
               </div>
-
-              {activeFamily.role === "owner" && (
-                <form
-                  className="grid gap-3 border-t border-border pt-5 sm:grid-cols-[1fr_1fr_auto]"
-                  onSubmit={createInvite}
-                >
-                  <Input
-                    aria-label="Invitee name"
-                    className="h-11 rounded-lg px-3"
-                    maxLength={80}
-                    onChange={(event) => setInviteName(event.target.value)}
-                    placeholder="Invitee name"
-                    required
-                    value={inviteName}
-                  />
-                  <Input
-                    aria-label="Invitee email"
-                    className="h-11 rounded-lg px-3"
-                    onChange={(event) => setInviteEmail(event.target.value)}
-                    placeholder="Invitee email"
-                    required
-                    type="email"
-                    value={inviteEmail}
-                  />
-                  <Button
-                    className="h-11 rounded-lg"
-                    disabled={isSubmitting}
-                    type="submit"
-                    variant="outline"
-                  >
-                    <Users aria-hidden="true" className="mr-2 size-4" />
-                    Add pending member
-                  </Button>
-                </form>
-              )}
             </section>
           ) : (
             <p className="rounded-xl bg-white p-6 text-sm text-muted-foreground">
@@ -1231,360 +1186,559 @@ export function FamilyDashboard({
         </>
       )}
 
-      {view === "list" && activeFamily && (
-        <section className="space-y-5 rounded-2xl bg-white p-5 shadow-lg sm:p-8">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-            <div>
-              <p className="font-mono text-xs tracking-[0.18em] text-accent-red uppercase">
-                {selectedMember?.display_name ?? "Family"} · {activeFamily.year}
-              </p>
-              <h2 className="text-2xl font-bold text-lighter-black">
-                Wish list
-              </h2>
-              {selectedMember && (
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {selectedMember.favorite_items.length > 0 &&
-                    `Favorites: ${selectedMember.favorite_items.join(", ")}`}
-                  {selectedMember.things_they_like.length > 0 &&
-                    ` · Likes: ${selectedMember.things_they_like.join(", ")}`}
-                </p>
-              )}
-            </div>
-            {listOwnerId !== user.id && (
-              <Button
-                className="rounded-lg"
-                onClick={() => navigate("/family")}
-                variant="outline"
-              >
-                Back to family
-              </Button>
-            )}
-          </div>
-
-          {listOwnerId === user.id && (
-            <form
-              className="grid gap-3 rounded-xl bg-[#f8f8f8] p-4 sm:grid-cols-2 lg:grid-cols-5"
-              onSubmit={addGift}
+      {(view === "profile" || view === "list") && (
+        <div
+          className={
+            isOwnProfileArea ? "grid gap-5 md:grid-cols-[12rem_1fr]" : ""
+          }
+        >
+          {isOwnProfileArea && (
+            <aside
+              aria-label="Profile sections"
+              className="flex gap-2 md:flex-col"
             >
-              <Input
-                aria-label="Gift title"
-                className="h-11 rounded-lg bg-white px-3"
-                maxLength={120}
-                onChange={(event) =>
-                  setGiftForm((current) => ({
-                    ...current,
-                    title: event.target.value,
-                  }))
-                }
-                placeholder="Gift idea"
-                required
-                value={giftForm.title}
-              />
-              <select
-                aria-label="Gift category"
-                className="h-11 rounded-lg border border-border bg-white px-3 text-sm"
-                onChange={(event) =>
-                  setGiftForm((current) => ({
-                    ...current,
-                    category: event.target.value as GiftCategory,
-                  }))
-                }
-                value={giftForm.category}
+              <NavLink
+                className={() => navClass(view === "profile")}
+                to="/profile"
               >
-                {categories.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <Input
-                aria-label="Gift price in dollars"
-                className="h-11 rounded-lg bg-white px-3"
-                min="0"
-                onChange={(event) =>
-                  setGiftForm((current) => ({
-                    ...current,
-                    price: event.target.value,
-                  }))
-                }
-                placeholder="Price ($)"
-                step="0.01"
-                type="number"
-                value={giftForm.price}
-              />
-              <Input
-                aria-label="Product link"
-                className="h-11 rounded-lg bg-white px-3"
-                onChange={(event) =>
-                  setGiftForm((current) => ({
-                    ...current,
-                    url: event.target.value,
-                  }))
-                }
-                placeholder="Product link"
-                type="url"
-                value={giftForm.url}
-              />
-              <Input
-                aria-label="Gift note"
-                className="h-11 rounded-lg bg-white px-3"
-                onChange={(event) =>
-                  setGiftForm((current) => ({
-                    ...current,
-                    notes: event.target.value,
-                  }))
-                }
-                placeholder="Optional note"
-                value={giftForm.notes}
-              />
-              <Button
-                className="rounded-lg bg-accent-red text-white hover:bg-[#e23e46]"
-                disabled={isSubmitting}
-                type="submit"
+                Your profile
+              </NavLink>
+              <NavLink
+                className={() => navClass(view === "list")}
+                onClick={() => {
+                  setCategory("want")
+                  setPriceFilter("all")
+                }}
+                to="/profile/list"
               >
-                <Plus aria-hidden="true" className="mr-2 size-4" />
-                Add gift
-              </Button>
-              <Button
-                className="rounded-lg"
-                disabled={isSubmitting}
-                onClick={() => void importOriginalList()}
-                type="button"
-                variant="outline"
-              >
-                Import original list
-              </Button>
-            </form>
+                My list
+              </NavLink>
+            </aside>
           )}
-
-          <div className="flex flex-wrap gap-2">
-            {categories.map((option) => (
-              <button
-                className={navClass(category === option.value)}
-                key={option.value}
-                onClick={() => setCategory(option.value)}
-                type="button"
+          <div className="min-w-0 space-y-6">
+            {view === "profile" && (
+              <form
+                className="grid gap-3 rounded-2xl bg-white p-5 shadow-lg sm:grid-cols-2"
+                onSubmit={saveProfile}
               >
-                {option.label} (
-                {
-                  details.gifts.filter(
-                    (gift) =>
-                      gift.owner_id === listOwnerId &&
-                      gift.category === option.value
-                  ).length
-                }
-                )
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {priceFilters.map((option) => (
-              <button
-                className={`${navClass(priceFilter === option.value)} border border-border`}
-                key={option.value}
-                onClick={() => setPriceFilter(option.value)}
-                type="button"
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          {visibleGifts.length === 0 ? (
-            <p className="rounded-xl bg-[#f8f8f8] p-6 text-sm text-muted-foreground">
-              No gifts in this category and price range yet.
-            </p>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {visibleGifts.map((gift) => {
-                const claim = claimsByGift.get(gift.id)
-                const teamUp = teamUpByGift.get(gift.id)
-                const isOwner = gift.owner_id === user.id
-                const isParticipant = Boolean(
-                  teamUp &&
-                  details.teamUpMembers.some(
-                    (member) =>
-                      member.team_up_id === teamUp.id &&
-                      member.user_id === user.id
-                  )
-                )
-                return (
-                  <article
-                    className="space-y-3 rounded-xl border border-border bg-white p-4 shadow-sm"
-                    key={gift.id}
-                  >
-                    {gift.image_url && (
-                      <img
-                        alt=""
-                        className="h-40 w-full rounded-lg object-cover"
-                        src={gift.image_url}
-                      />
+                <div className="sm:col-span-2">
+                  <h2 className="text-xl font-bold text-lighter-black">
+                    Your profile
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Your birth year stays private; sharing an age label is
+                    optional.
+                  </p>
+                </div>
+                <Input
+                  aria-label="Display name"
+                  className="h-11 rounded-lg px-3"
+                  maxLength={80}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  placeholder="Display name"
+                  required
+                  value={displayName}
+                />
+                <Input
+                  aria-label="Birth year"
+                  className="h-11 rounded-lg px-3"
+                  max={new Date().getFullYear()}
+                  min={1900}
+                  onChange={(event) => setBirthYear(event.target.value)}
+                  placeholder="Birth year (optional)"
+                  type="number"
+                  value={birthYear}
+                />
+                <Input
+                  aria-label="Favorite items"
+                  className="h-11 rounded-lg px-3"
+                  onChange={(event) => setFavoriteItems(event.target.value)}
+                  placeholder="Favorite items (comma separated)"
+                  value={favoriteItems}
+                />
+                <Input
+                  aria-label="Things you like"
+                  className="h-11 rounded-lg px-3"
+                  onChange={(event) => setThingsTheyLike(event.target.value)}
+                  placeholder="Things you like (comma separated)"
+                  value={thingsTheyLike}
+                />
+                <div className="space-y-2 sm:col-span-2">
+                  <p className="text-sm font-semibold text-lighter-black">
+                    Your ornament
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {(Object.keys(ORNAMENT_ICONS) as AvatarIcon[]).map(
+                      (key) => {
+                        const Icon = ORNAMENT_ICONS[key]
+                        return (
+                          <button
+                            aria-label={`Ornament icon ${key}`}
+                            aria-pressed={avatarIcon === key}
+                            className={`flex size-10 items-center justify-center rounded-lg border ${avatarIcon === key ? "border-accent-red ring-2 ring-accent-red/30" : "border-border"}`}
+                            key={key}
+                            onClick={() => setAvatarIcon(key)}
+                            style={{ backgroundColor: avatarColor }}
+                            type="button"
+                          >
+                            <Icon
+                              aria-hidden="true"
+                              className="size-5 text-white"
+                            />
+                          </button>
+                        )
+                      }
                     )}
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="font-semibold text-lighter-black">
-                          {gift.title}
-                        </h3>
-                        {gift.store && (
-                          <p className="text-xs text-muted-foreground">
-                            {gift.store}
-                          </p>
-                        )}
-                      </div>
-                      {gift.price !== null && (
-                        <span className="shrink-0 rounded-full bg-[#fff3d4] px-3 py-1 text-sm font-bold text-lighter-black">
-                          ${Number(gift.price).toFixed(2)}
-                        </span>
-                      )}
-                    </div>
-                    {gift.notes && (
-                      <p className="text-sm text-muted-foreground">
-                        {gift.notes}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {ORNAMENT_COLORS.map((color) => (
+                      <button
+                        aria-label={`Ornament color ${color}`}
+                        aria-pressed={avatarColor === color}
+                        className={`size-8 rounded-full border-2 ${avatarColor === color ? "border-lighter-black" : "border-white shadow"}`}
+                        key={color}
+                        onClick={() => setAvatarColor(color)}
+                        style={{ backgroundColor: color }}
+                        type="button"
+                      />
+                    ))}
+                  </div>
+                  <Button
+                    className="gap-2 rounded-lg"
+                    disabled
+                    title="Photo upload is coming soon"
+                    type="button"
+                    variant="outline"
+                  >
+                    <ImagePlus aria-hidden="true" className="size-4" />
+                    Use my photo (coming soon)
+                  </Button>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-lighter-black sm:col-span-2">
+                  <input
+                    checked={shareAge}
+                    onChange={(event) => setShareAge(event.target.checked)}
+                    type="checkbox"
+                  />
+                  Share an approximate age with family members
+                </label>
+                <Button
+                  className="w-fit rounded-lg"
+                  disabled={isSubmitting}
+                  type="submit"
+                  variant="outline"
+                >
+                  Save profile
+                </Button>
+              </form>
+            )}
+            {view === "list" && activeFamily && (
+              <section className="space-y-5 rounded-2xl bg-white p-5 shadow-lg sm:p-8">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+                  <div>
+                    <p className="font-mono text-xs tracking-[0.18em] text-accent-red uppercase">
+                      {selectedMember?.display_name ?? "Family"} ·{" "}
+                      {activeFamily.year}
+                    </p>
+                    <h2 className="text-2xl font-bold text-lighter-black">
+                      Wish list
+                    </h2>
+                    {selectedMember && (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {selectedMember.favorite_items.length > 0 &&
+                          `Favorites: ${selectedMember.favorite_items.join(", ")}`}
+                        {selectedMember.things_they_like.length > 0 &&
+                          ` · Likes: ${selectedMember.things_they_like.join(", ")}`}
                       </p>
                     )}
-                    {gift.url && (
-                      <a
-                        className="inline-flex items-center gap-1 text-sm font-semibold text-accent-red underline-offset-4 hover:underline"
-                        href={gift.url}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        View gift{" "}
-                        <ExternalLink aria-hidden="true" className="size-3" />
-                      </a>
-                    )}
-                    {isOwner ? (
-                      <Button
-                        aria-label={`Remove ${gift.title}`}
-                        className="w-full rounded-lg"
-                        disabled={pendingId === gift.id}
-                        onClick={() => void deleteGift(gift.id)}
-                        variant="outline"
-                      >
-                        <Trash2 aria-hidden="true" className="mr-2 size-4" />
-                        Remove from my list
-                      </Button>
-                    ) : claim ? (
-                      claim.claimed_by === user.id ? (
-                        <Button
-                          className="w-full rounded-lg"
-                          disabled={pendingId === gift.id}
-                          onClick={() => void releaseClaim(gift.id)}
-                          variant="outline"
-                        >
-                          <Check aria-hidden="true" className="mr-2 size-4" />
-                          You&apos;re getting this · Undo
-                        </Button>
-                      ) : (
-                        <p className="rounded-lg bg-[#f3f3f3] px-3 py-2 text-center text-sm text-muted-foreground">
-                          Already taken
-                        </p>
-                      )
-                    ) : teamUp ? (
-                      <div className="space-y-2 rounded-lg bg-[#f3f8f4] p-3 text-sm">
-                        <p className="font-semibold text-lighter-black">
-                          {teamUp.status === "funded" ? "Purchased" : "Team-up"}{" "}
-                          ·{" "}
-                          {
-                            details.teamUpMembers.filter(
-                              (member) => member.team_up_id === teamUp.id
-                            ).length
-                          }{" "}
-                          joined
-                          {gift.price !== null &&
-                            details.teamUpMembers.some(
-                              (member) => member.team_up_id === teamUp.id
-                            ) &&
-                            ` · about $${(Number(gift.price) / Math.max(1, details.teamUpMembers.filter((member) => member.team_up_id === teamUp.id).length)).toFixed(2)} each`}
-                        </p>
-                        {teamUp.status === "open" && !isParticipant && (
-                          <Button
-                            className="w-full rounded-lg"
-                            disabled={pendingId === teamUp.id}
-                            onClick={() => void joinTeamUp(teamUp.id)}
-                            variant="outline"
-                          >
-                            Join team-up
-                          </Button>
-                        )}
-                        {teamUp.status === "open" && isParticipant && (
-                          <form
-                            className="flex gap-2"
-                            onSubmit={(event) =>
-                              void completeTeamUp(event, teamUp.id)
-                            }
-                          >
-                            <Input
-                              aria-label="Purchase proof link"
-                              className="h-10 min-w-0 rounded-lg bg-white px-2 text-sm"
-                              onChange={(event) =>
-                                setProofUrls((current) => ({
-                                  ...current,
-                                  [teamUp.id]: event.target.value,
-                                }))
-                              }
-                              placeholder="Purchase proof link"
-                              type="url"
-                              value={proofUrls[teamUp.id] ?? ""}
-                            />
-                            <Button
-                              className="rounded-lg"
-                              disabled={pendingId === teamUp.id}
-                              type="submit"
-                            >
-                              Purchased
-                            </Button>
-                          </form>
-                        )}
-                        {teamUp.purchase_proof_url && (
-                          <a
-                            className="text-accent-red underline"
-                            href={teamUp.purchase_proof_url}
-                            rel="noreferrer"
-                            target="_blank"
-                          >
-                            View purchase proof
-                          </a>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex gap-2">
-                        <Button
-                          className="flex-1 rounded-lg bg-accent-red text-white hover:bg-[#e23e46]"
-                          disabled={pendingId === gift.id}
-                          onClick={() => void claimGift(gift.id)}
-                        >
-                          I&apos;ll get this
-                        </Button>
-                        {gift.price !== null && gift.price >= 60 && (
-                          <Button
-                            aria-label={`Start a team-up for ${gift.title}`}
-                            className="rounded-lg"
-                            disabled={pendingId === gift.id}
-                            onClick={() => void createTeamUp(gift.id)}
-                            variant="outline"
-                          >
-                            Team up
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </article>
-                )
-              })}
-            </div>
-          )}
-          <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
-            <Gift
-              aria-hidden="true"
-              className="mt-0.5 size-4 shrink-0 text-accent-red"
-            />
-            The gift owner cannot see claims or team-up activity. This is
-            enforced by database row-level security.
-          </p>
-        </section>
-      )}
+                  </div>
+                  {listOwnerId !== user.id && (
+                    <Button
+                      className="rounded-lg"
+                      onClick={() => navigate("/tree")}
+                      variant="outline"
+                    >
+                      Back to tree
+                    </Button>
+                  )}
+                </div>
 
+                {listOwnerId === user.id && (
+                  <form
+                    className="grid gap-3 rounded-xl bg-[#f8f8f8] p-4 sm:grid-cols-2 lg:grid-cols-5"
+                    onSubmit={addGift}
+                  >
+                    <Input
+                      aria-label="Gift title"
+                      className="h-11 rounded-lg bg-white px-3"
+                      maxLength={120}
+                      onChange={(event) =>
+                        setGiftForm((current) => ({
+                          ...current,
+                          title: event.target.value,
+                        }))
+                      }
+                      placeholder="Gift name (optional with a link)"
+                      value={giftForm.title}
+                    />
+                    <select
+                      aria-label="Gift category"
+                      className="h-11 rounded-lg border border-border bg-white px-3 text-sm"
+                      onChange={(event) =>
+                        setGiftForm((current) => ({
+                          ...current,
+                          category: event.target.value as GiftCategory,
+                        }))
+                      }
+                      value={giftForm.category}
+                    >
+                      {categories.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      aria-label="Gift price in dollars"
+                      className="h-11 rounded-lg bg-white px-3"
+                      min="0"
+                      onChange={(event) =>
+                        setGiftForm((current) => ({
+                          ...current,
+                          price: event.target.value,
+                        }))
+                      }
+                      placeholder="Price ($)"
+                      step="0.01"
+                      type="number"
+                      value={giftForm.price}
+                    />
+                    <Input
+                      aria-label="Product link"
+                      className="h-11 rounded-lg bg-white px-3"
+                      onChange={(event) =>
+                        setGiftForm((current) => ({
+                          ...current,
+                          url: event.target.value,
+                        }))
+                      }
+                      placeholder="Product link"
+                      type="url"
+                      value={giftForm.url}
+                    />
+                    <Input
+                      aria-label="Gift note"
+                      className="h-11 rounded-lg bg-white px-3"
+                      onChange={(event) =>
+                        setGiftForm((current) => ({
+                          ...current,
+                          notes: event.target.value,
+                        }))
+                      }
+                      placeholder="Optional note"
+                      value={giftForm.notes}
+                    />
+                    <Button
+                      className="rounded-lg bg-accent-red text-white hover:bg-[#e23e46]"
+                      disabled={isSubmitting}
+                      type="submit"
+                    >
+                      <Plus aria-hidden="true" className="mr-2 size-4" />
+                      Add gift
+                    </Button>
+                    <Button
+                      className="rounded-lg"
+                      disabled={isSubmitting}
+                      onClick={() => void importOriginalList()}
+                      type="button"
+                      variant="outline"
+                    >
+                      Import original list
+                    </Button>
+                  </form>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  {categories.map((option) => (
+                    <button
+                      className={navClass(category === option.value)}
+                      key={option.value}
+                      onClick={() => setCategory(option.value)}
+                      type="button"
+                    >
+                      {option.label} (
+                      {
+                        details.gifts.filter(
+                          (gift) =>
+                            gift.owner_id === listOwnerId &&
+                            gift.category === option.value
+                        ).length
+                      }
+                      )
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {priceFilters.map((option) => (
+                    <button
+                      className={`${navClass(priceFilter === option.value)} border border-border`}
+                      key={option.value}
+                      onClick={() => setPriceFilter(option.value)}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+
+                {visibleGifts.length === 0 ? (
+                  <p className="rounded-xl bg-[#f8f8f8] p-6 text-sm text-muted-foreground">
+                    No gifts in this category and price range yet.
+                  </p>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {visibleGifts.map((gift) => {
+                      const claim = claimsByGift.get(gift.id)
+                      const teamUp = teamUpByGift.get(gift.id)
+                      const isOwner = gift.owner_id === user.id
+                      const isParticipant = Boolean(
+                        teamUp &&
+                        details.teamUpMembers.some(
+                          (member) =>
+                            member.team_up_id === teamUp.id &&
+                            member.user_id === user.id
+                        )
+                      )
+                      return (
+                        <article
+                          className="space-y-3 rounded-xl border border-border bg-white p-4 shadow-sm"
+                          key={gift.id}
+                        >
+                          {gift.image_url && (
+                            <img
+                              alt=""
+                              className="h-40 w-full rounded-lg object-cover"
+                              src={gift.image_url}
+                            />
+                          )}
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              {editingGiftId === gift.id ? (
+                                <form
+                                  className="flex gap-1"
+                                  onSubmit={(event) => {
+                                    event.preventDefault()
+                                    void renameGift(gift.id)
+                                  }}
+                                >
+                                  <Input
+                                    aria-label="Gift name"
+                                    autoFocus
+                                    className="h-8 rounded-lg px-2 text-sm"
+                                    maxLength={120}
+                                    onChange={(event) =>
+                                      setEditTitle(event.target.value)
+                                    }
+                                    value={editTitle}
+                                  />
+                                  <Button size="sm" type="submit">
+                                    Save
+                                  </Button>
+                                </form>
+                              ) : (
+                                <h3 className="flex items-center gap-1 font-semibold text-lighter-black">
+                                  {gift.title}
+                                  {isOwner && (
+                                    <button
+                                      aria-label={`Rename ${gift.title}`}
+                                      className="text-muted-foreground hover:text-lighter-black"
+                                      onClick={() => {
+                                        setEditingGiftId(gift.id)
+                                        setEditTitle(gift.title)
+                                      }}
+                                      type="button"
+                                    >
+                                      <Pencil
+                                        aria-hidden="true"
+                                        className="size-3"
+                                      />
+                                    </button>
+                                  )}
+                                </h3>
+                              )}
+                              {gift.store && (
+                                <p className="text-xs text-muted-foreground">
+                                  {gift.store}
+                                </p>
+                              )}
+                            </div>
+                            {gift.price !== null && (
+                              <span className="shrink-0 rounded-full bg-[#fff3d4] px-3 py-1 text-sm font-bold text-lighter-black">
+                                ${Number(gift.price).toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                          {gift.notes && (
+                            <p className="text-sm text-muted-foreground">
+                              {gift.notes}
+                            </p>
+                          )}
+                          {gift.url && (
+                            <a
+                              className="inline-flex items-center gap-1 text-sm font-semibold text-accent-red underline-offset-4 hover:underline"
+                              href={gift.url}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              View gift{" "}
+                              <ExternalLink
+                                aria-hidden="true"
+                                className="size-3"
+                              />
+                            </a>
+                          )}
+                          {isOwner ? (
+                            <Button
+                              aria-label={`Remove ${gift.title}`}
+                              className="w-full rounded-lg"
+                              disabled={pendingId === gift.id}
+                              onClick={() => void deleteGift(gift.id)}
+                              variant="outline"
+                            >
+                              <Trash2
+                                aria-hidden="true"
+                                className="mr-2 size-4"
+                              />
+                              Remove from my list
+                            </Button>
+                          ) : claim ? (
+                            claim.claimed_by === user.id ? (
+                              <Button
+                                className="w-full rounded-lg"
+                                disabled={pendingId === gift.id}
+                                onClick={() => void releaseClaim(gift.id)}
+                                variant="outline"
+                              >
+                                <Check
+                                  aria-hidden="true"
+                                  className="mr-2 size-4"
+                                />
+                                You&apos;re getting this · Undo
+                              </Button>
+                            ) : (
+                              <p className="rounded-lg bg-[#f3f3f3] px-3 py-2 text-center text-sm text-muted-foreground">
+                                Already taken
+                              </p>
+                            )
+                          ) : teamUp ? (
+                            <div className="space-y-2 rounded-lg bg-[#f3f8f4] p-3 text-sm">
+                              <p className="font-semibold text-lighter-black">
+                                {teamUp.status === "funded"
+                                  ? "Purchased"
+                                  : "Team-up"}{" "}
+                                ·{" "}
+                                {
+                                  details.teamUpMembers.filter(
+                                    (member) => member.team_up_id === teamUp.id
+                                  ).length
+                                }{" "}
+                                joined
+                                {gift.price !== null &&
+                                  details.teamUpMembers.some(
+                                    (member) => member.team_up_id === teamUp.id
+                                  ) &&
+                                  ` · about $${(Number(gift.price) / Math.max(1, details.teamUpMembers.filter((member) => member.team_up_id === teamUp.id).length)).toFixed(2)} each`}
+                              </p>
+                              {teamUp.status === "open" && !isParticipant && (
+                                <Button
+                                  className="w-full rounded-lg"
+                                  disabled={pendingId === teamUp.id}
+                                  onClick={() => void joinTeamUp(teamUp.id)}
+                                  variant="outline"
+                                >
+                                  Join team-up
+                                </Button>
+                              )}
+                              {teamUp.status === "open" && isParticipant && (
+                                <form
+                                  className="flex gap-2"
+                                  onSubmit={(event) =>
+                                    void completeTeamUp(event, teamUp.id)
+                                  }
+                                >
+                                  <Input
+                                    aria-label="Purchase proof link"
+                                    className="h-10 min-w-0 rounded-lg bg-white px-2 text-sm"
+                                    onChange={(event) =>
+                                      setProofUrls((current) => ({
+                                        ...current,
+                                        [teamUp.id]: event.target.value,
+                                      }))
+                                    }
+                                    placeholder="Purchase proof link"
+                                    type="url"
+                                    value={proofUrls[teamUp.id] ?? ""}
+                                  />
+                                  <Button
+                                    className="rounded-lg"
+                                    disabled={pendingId === teamUp.id}
+                                    type="submit"
+                                  >
+                                    Purchased
+                                  </Button>
+                                </form>
+                              )}
+                              {teamUp.purchase_proof_url && (
+                                <a
+                                  className="text-accent-red underline"
+                                  href={teamUp.purchase_proof_url}
+                                  rel="noreferrer"
+                                  target="_blank"
+                                >
+                                  View purchase proof
+                                </a>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex gap-2">
+                              <Button
+                                className="flex-1 rounded-lg bg-accent-red text-white hover:bg-[#e23e46]"
+                                disabled={pendingId === gift.id}
+                                onClick={() => void claimGift(gift.id)}
+                              >
+                                I&apos;ll get this
+                              </Button>
+                              {gift.price !== null && gift.price >= 60 && (
+                                <Button
+                                  aria-label={`Start a team-up for ${gift.title}`}
+                                  className="rounded-lg"
+                                  disabled={pendingId === gift.id}
+                                  onClick={() => void createTeamUp(gift.id)}
+                                  variant="outline"
+                                >
+                                  Team up
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </article>
+                      )
+                    })}
+                  </div>
+                )}
+                <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+                  <Gift
+                    aria-hidden="true"
+                    className="mt-0.5 size-4 shrink-0 text-accent-red"
+                  />
+                  The gift owner cannot see claims or team-up activity. This is
+                  enforced by database row-level security.
+                </p>
+              </section>
+            )}
+          </div>
+        </div>
+      )}
       {view === "team-ups" && activeFamily && (
         <section className="space-y-4 rounded-2xl bg-white p-5 shadow-lg sm:p-8">
           <div className="flex items-center gap-3">
@@ -1598,13 +1752,13 @@ export function FamilyDashboard({
               </p>
             </div>
           </div>
-          {details.teamUps.length === 0 ? (
+          {myTeamUps.length === 0 ? (
             <p className="rounded-xl bg-[#f8f8f8] p-5 text-sm text-muted-foreground">
               No team-ups yet. Start one from a gift priced at $60 or more.
             </p>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {details.teamUps.map((teamUp) => {
+              {myTeamUps.map((teamUp) => {
                 const gift = details.gifts.find(
                   (item) => item.id === teamUp.gift_id
                 )

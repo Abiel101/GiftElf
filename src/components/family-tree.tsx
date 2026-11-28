@@ -1,49 +1,20 @@
-import {
-  Bell,
-  Candy,
-  CandyCane,
-  Cookie,
-  Gem,
-  Gift,
-  Heart,
-  Puzzle,
-  Rocket,
-  Snowflake,
-  Star,
-  type LucideIcon,
-} from "lucide-react"
+import { Star } from "lucide-react"
 
-// Stand-ins until custom pixel-art ornaments are drawn.
-const ORNAMENT_ICONS: LucideIcon[] = [
-  Gift,
-  Bell,
-  CandyCane,
-  Snowflake,
-  Cookie,
-  Gem,
-  Rocket,
-  Puzzle,
-  Candy,
-  Heart,
-  Star,
-]
+import type { AvatarIcon, TreeTheme } from "@/lib/database.types"
+import { ORNAMENT_ICONS, TREE_THEMES } from "@/lib/tree-theme"
 
 export type TreeMember = {
   id: string
   display_name: string
   avatar_color: string
+  avatar_icon: AvatarIcon
 }
 
 type FamilyTreeProps = {
   members: TreeMember[]
   currentUserId: string
+  theme?: TreeTheme
   onSelect: (memberId: string) => void
-}
-
-function iconFor(id: string) {
-  let hash = 0
-  for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-  return ORNAMENT_ICONS[hash % ORNAMENT_ICONS.length]
 }
 
 function layoutRows(count: number) {
@@ -64,8 +35,10 @@ function colorOf(value: string) {
 export function FamilyTree({
   members,
   currentUserId,
+  theme = "classic",
   onSelect,
 }: FamilyTreeProps) {
+  const palette = TREE_THEMES[theme]
   const rows = layoutRows(members.length)
   const top = 24
   const bottom = 86
@@ -73,7 +46,10 @@ export function FamilyTree({
   let index = 0
 
   return (
-    <div className="family-tree relative mx-auto w-full max-w-xl">
+    <div
+      className="family-tree relative mx-auto w-full max-w-xl rounded-2xl"
+      style={{ backgroundColor: palette.background }}
+    >
       <svg
         aria-hidden="true"
         className="block h-auto w-full"
@@ -84,10 +60,7 @@ export function FamilyTree({
           const y = 12 + tier * 20
           const steps = 5
           return (
-            <g
-              fill={["#6fdcb0", "#3db58a", "#2f9e78", "#1f8f6b"][tier]}
-              key={tier}
-            >
+            <g fill={palette.tiers[tier]} key={tier}>
               {Array.from({ length: steps }, (_, step) => {
                 const half = 6 + tier * 8 + step * 3
                 return (
@@ -103,18 +76,19 @@ export function FamilyTree({
             </g>
           )
         })}
-        <rect fill="#8a5a3c" height="12" width="12" x="44" y="98" />
+        <rect fill={palette.trunk} height="12" width="12" x="44" y="98" />
       </svg>
       <Star
         aria-hidden="true"
-        className="family-tree-topper absolute top-[1%] left-1/2 size-9 -translate-x-1/2 fill-[#ffe18b] text-[#f5b73b]"
+        className="family-tree-topper absolute top-[1%] left-1/2 size-9 -translate-x-1/2"
+        style={{ color: palette.star, fill: palette.star }}
       />
       {rows.map((rowSize, rowIndex) => {
         const y = rows.length === 1 ? 50 : top + rowIndex * rowGap
         const halfWidth = 10 + (y - 12) * 0.42
         return Array.from({ length: rowSize }, (_, column) => {
           const member = members[index++]
-          const Icon = iconFor(member.id)
+          const Icon = ORNAMENT_ICONS[member.avatar_icon] ?? ORNAMENT_ICONS.gift
           const x = 50 + ((column + 1) / (rowSize + 1) - 0.5) * 2 * halfWidth
           return (
             <button
