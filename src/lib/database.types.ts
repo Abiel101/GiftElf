@@ -5,6 +5,20 @@ type Table<Row, Insert, Update = Partial<Insert>> = {
   Relationships: []
 }
 
+export type TreeTheme = "classic" | "tokyo-night" | "mist" | "amber"
+export type AvatarIcon =
+  | "gift"
+  | "bell"
+  | "candy-cane"
+  | "snowflake"
+  | "cookie"
+  | "gem"
+  | "rocket"
+  | "puzzle"
+  | "candy"
+  | "heart"
+  | "star"
+
 export type GiftCategory = "want" | "need" | "gift_card" | "nice_to_have"
 
 export type Database = {
@@ -15,6 +29,7 @@ export type Database = {
           id: string
           display_name: string
           avatar_color: string
+          avatar_icon: AvatarIcon
           favorite_items: string[]
           things_they_like: string[]
           created_at: string
@@ -23,6 +38,7 @@ export type Database = {
           id: string
           display_name: string
           avatar_color?: string
+          avatar_icon?: AvatarIcon
           favorite_items?: string[]
           things_they_like?: string[]
           created_at?: string
@@ -31,6 +47,7 @@ export type Database = {
           id?: string
           display_name?: string
           avatar_color?: string
+          avatar_icon?: AvatarIcon
           favorite_items?: string[]
           things_they_like?: string[]
           created_at?: string
@@ -48,6 +65,7 @@ export type Database = {
           year: number
           invite_code: string
           invite_code_expires_at: string
+          tree_theme: TreeTheme
           created_by: string
           created_at: string
         },
@@ -57,6 +75,7 @@ export type Database = {
           year: number
           invite_code?: string
           invite_code_expires_at: string
+          tree_theme?: TreeTheme
           created_by: string
           created_at?: string
         }

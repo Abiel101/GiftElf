@@ -133,7 +133,12 @@ function AuthenticatedApp({ client }: AuthenticatedAppProps) {
         <Routes>
           <Route path="/tree" element={dashboard} />
           <Route path="/family" element={dashboard} />
-          <Route path="/list" element={dashboard} />
+          <Route path="/profile" element={dashboard} />
+          <Route path="/profile/list" element={dashboard} />
+          <Route
+            path="/list"
+            element={<Navigate to="/profile/list" replace />}
+          />
           <Route path="/list/:ownerId" element={dashboard} />
           <Route path="/team-ups" element={dashboard} />
           <Route path="*" element={<Navigate to="/tree" replace />} />
