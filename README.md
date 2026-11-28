@@ -5,7 +5,7 @@ Gift Elf is a family Christmas wish-list app built with React, TypeScript, Vite,
 ## Supabase setup
 
 1. Create a Supabase project.
-2. In the Supabase SQL Editor, run the files in [`supabase/migrations`](./supabase/migrations) in filename order. For an existing project, run all migrations that have not yet been applied, through `20261128060000_owner_invite_settings.sql`, before using the updated app.
+2. In the Supabase SQL Editor, run the files in [`supabase/migrations`](./supabase/migrations) in filename order. For an existing project, run all migrations that have not yet been applied, through `20261128070000_cyberpunk_tree_theme.sql`, before using the updated app.
 3. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from the project's API settings. `VITE_SUPABASE_ANON_KEY` is also supported for older projects. These are browser-safe project values; never put a `service_role` key in the app.
 4. Enable email/password authentication in Supabase. If email confirmation is on, new users need to confirm before signing in.
 
@@ -53,9 +53,15 @@ allowed in Supabase URL Configuration.
 Each user can choose an account-saved app theme in their profile, including
 Cyberpunk. The Tree page always shows the selected family's shared theme;
 elsewhere, the personal theme applies unless "Match family" is selected.
+Family owners can choose Cyberpunk or randomly select another coordinated tree
+palette in Family settings; the choice is shared with the whole family.
+Use the bottom-right menu to open Tree, Family, and account settings or switch
+families. On mobile, swipe the tree left or right to switch families; the menu
+also provides a non-swipe option.
 
-Lists belong to a person within one family. Create a list before adding items;
-other family members can see it and claim gifts without revealing claims to
+Lists belong to a person within one family. Start the selected family's yearly
+list without naming it, then add items; additional named lists are also available.
+Other family members can see lists and claim gifts without revealing claims to
 the owner. Existing gifts are moved into a default "Wish list" by the migration.
 Parents can add children to a specific family from its member roster and manage
 separate lists for each child. Children do not have sign-in accounts; the

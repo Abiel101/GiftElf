@@ -269,14 +269,34 @@ body:has(.intro-overlay) {
   );
 }
 
+@property --app-from {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #cf3342;
+}
+
+@property --app-via {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #bf2d3d;
+}
+
+@property --app-to {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #a82035;
+}
+
 .app-background {
   --app-from: #cf3342;
-  --app-via: #bf2d3d;
+  --app-via-target: #bf2d3d;
+  --app-via: var(--app-via-target);
   --app-to: #a82035;
   --app-fg: #ffffff;
   --app-surface: #ffffff;
   --app-surface-fg: #222222;
   --app-accent: #c52d3a;
+  --tree-heading: #fff0b0;
   --background: var(--app-surface);
   --foreground: var(--app-surface-fg);
   --muted: #f3f3f3;
@@ -298,17 +318,22 @@ body:has(.intro-overlay) {
   );
   background-attachment: fixed;
   color: var(--app-fg);
-  transition: background-color 0.3s;
+  transition:
+    --app-from 300ms ease,
+    --app-via 300ms ease,
+    --app-to 300ms ease,
+    color 300ms ease;
 }
 
 html[data-app-theme="tokyo-night"] .app-background {
   --app-from: #24283b;
-  --app-via: #1a1b26;
+  --app-via-target: #1a1b26;
   --app-to: #16161e;
   --app-fg: #c0caf5;
   --app-surface: #242a3e;
   --app-surface-fg: #f0f3ff;
   --app-accent: #c2d0ff;
+  --tree-heading: #c2d0ff;
   --muted: #343c54;
   --muted-foreground: #ccd3e8;
   --border: #72809c;
@@ -317,12 +342,13 @@ html[data-app-theme="tokyo-night"] .app-background {
 
 html[data-app-theme="mist"] .app-background {
   --app-from: #f4f8fa;
-  --app-via: #dbe7eb;
+  --app-via-target: #dbe7eb;
   --app-to: #b8cfd6;
   --app-fg: #222222;
   --app-surface: #f5fbfb;
   --app-surface-fg: #173a43;
   --app-accent: #235d70;
+  --tree-heading: #235d70;
   --muted: #e1eff0;
   --muted-foreground: #46636b;
   --border: #a3bec4;
@@ -331,12 +357,13 @@ html[data-app-theme="mist"] .app-background {
 
 html[data-app-theme="amber"] .app-background {
   --app-from: #fff6e6;
-  --app-via: #ffe3ac;
+  --app-via-target: #ffe3ac;
   --app-to: #f5b73b;
   --app-fg: #222222;
   --app-surface: #fff9ed;
   --app-surface-fg: #472e18;
   --app-accent: #84460f;
+  --tree-heading: #84460f;
   --muted: #f6e8cd;
   --muted-foreground: #735533;
   --border: #ceb385;
@@ -345,12 +372,13 @@ html[data-app-theme="amber"] .app-background {
 
 html[data-app-theme="cyberpunk"] .app-background {
   --app-from: #100e29;
-  --app-via: #291451;
+  --app-via-target: #291451;
   --app-to: #160e35;
   --app-fg: #f9f4ff;
   --app-surface: #251b38;
   --app-surface-fg: #fbf3ff;
   --app-accent: #e9baff;
+  --tree-heading: #e9baff;
   --muted: #39294c;
   --muted-foreground: #dfcfe8;
   --border: #806893;
@@ -443,8 +471,79 @@ html[data-app-theme="cyberpunk"] .app-nav-link.is-active {
   }
 }
 
+.tree-page {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100dvh;
+}
+
+.tree-page-heading {
+  min-width: 0;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem 0.5rem
+    max(1rem, env(safe-area-inset-left));
+}
+
+.tree-page-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tree-page-stage {
+  display: flex;
+  min-height: 100%;
+  align-items: flex-end;
+  justify-content: center;
+}
+
 .tree-slide {
+  width: 100%;
   animation: tree-slide-in 380ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.family-tree {
+  aspect-ratio: 100 / 112;
+  max-width: min(57.6rem, calc((100dvh - 9rem) * 0.892857));
+  min-height: max(0px, calc((var(--tree-rows) - 1) * 8.5rem));
+}
+
+@media (min-width: 640px) {
+  .tree-page {
+    grid-template-columns: clamp(11rem, 23vw, 20rem) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .tree-page-navigation {
+    position: absolute;
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    left: max(1rem, env(safe-area-inset-left));
+    max-width: calc(clamp(11rem, 23vw, 20rem) - 2rem);
+    max-height: 40dvh;
+    overflow-y: auto;
+  }
+
+  .family-tree {
+    max-width: min(57.6rem, calc(100dvh * 0.892857));
+  }
+}
+
+.account-menu-popup {
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.account-menu-popup[data-starting-style],
+.account-menu-popup[data-ending-style] {
+  opacity: 0;
+  transform: translateY(0.75rem);
+}
+
+.account-menu-popup[data-mobile="true"][data-starting-style],
+.account-menu-popup[data-mobile="true"][data-ending-style] {
+  transform: translateX(0.75rem);
 }
 
 .tree-neighbor {
@@ -711,7 +810,10 @@ html[data-app-theme="cyberpunk"] .app-nav-link.is-active {
   }
 
   .page-transition,
+  .app-background,
   .tree-slide,
+  .account-menu-popup,
+  .family-tree-topper,
   .page-transition::before,
   .intro-stage::after,
   .app-nav-link {
@@ -744,7 +846,34 @@ html[data-app-theme="cyberpunk"] .app-nav-link.is-active {
 }
 
 .family-tree-topper {
-  animation: holiday-light-twinkle 1.2s steps(2) infinite alternate;
+  filter: drop-shadow(0 0 3px var(--star-glow))
+    drop-shadow(0 0 10px var(--star-glow));
+}
+
+.family-tree-light {
+  position: absolute;
+  width: clamp(4px, 0.6vw, 7px);
+  height: clamp(4px, 0.6vw, 7px);
+  pointer-events: none;
+  background: currentColor;
+  box-shadow: 0 0 5px 1px currentColor;
+  opacity: 0.85;
+  animation: tree-light-twinkle 2.8s ease-in-out infinite alternate;
+}
+
+@keyframes tree-light-twinkle {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .family-tree-light {
+    animation: none;
+  }
 }
 
 /* Inputs under 16px make iOS Safari zoom the page on focus. */

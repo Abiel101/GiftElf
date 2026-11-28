@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react"
 import { Star } from "lucide-react"
 
 import type { AppTheme, AvatarIcon } from "@/lib/database.types"
@@ -18,7 +19,43 @@ type FamilyTreeProps = {
   onSelect: (memberId: string) => void
 }
 
+const lightPositions = [
+  [48, 19],
+  [53, 21],
+  [43, 27],
+  [51, 29],
+  [57, 28],
+  [37, 39],
+  [46, 37],
+  [55, 40],
+  [63, 39],
+  [33, 51],
+  [42, 48],
+  [52, 52],
+  [63, 49],
+  [25, 63],
+  [35, 60],
+  [45, 65],
+  [57, 61],
+  [69, 64],
+  [75, 60],
+  [20, 75],
+  [31, 72],
+  [43, 77],
+  [56, 73],
+  [68, 77],
+  [80, 74],
+  [15, 88],
+  [27, 85],
+  [39, 89],
+  [51, 86],
+  [63, 90],
+  [76, 86],
+  [85, 89],
+]
+
 function layoutRows(count: number) {
+  if (count > 3) return Array.from({ length: count }, () => 1)
   const rows: number[] = []
   let remaining = count
   for (let size = 1; remaining > 0; size++) {
@@ -47,10 +84,19 @@ export function FamilyTree({
   let index = 0
 
   return (
-    <div className="family-tree relative mx-auto w-full max-w-xl">
+    <div
+      className="family-tree relative mx-auto w-full"
+      style={
+        {
+          "--tree-rows": rows.length,
+          "--star-glow": palette.star,
+        } as CSSProperties
+      }
+    >
       <svg
         aria-hidden="true"
-        className="block h-auto w-full"
+        className="absolute inset-0 h-full w-full"
+        preserveAspectRatio="none"
         shapeRendering="crispEdges"
         viewBox="0 0 100 112"
       >
@@ -76,10 +122,24 @@ export function FamilyTree({
         })}
         <rect fill={palette.trunk} height="12" width="12" x="44" y="98" />
       </svg>
+      {lightPositions.map(([x, y], index) => (
+        <span
+          aria-hidden="true"
+          className="family-tree-light"
+          key={`${x}-${y}`}
+          style={{
+            left: `${x}%`,
+            top: `${(y / 112) * 100}%`,
+            color: palette.lights[index % palette.lights.length],
+            animationDelay: `${(index % 5) * -0.55}s`,
+          }}
+        />
+      ))}
       <Star
         aria-hidden="true"
-        className="family-tree-topper absolute top-[1%] left-1/2 size-9 -translate-x-1/2"
-        style={{ color: palette.star, fill: palette.star }}
+        className="family-tree-topper pointer-events-none absolute top-[1%] left-1/2 size-10 -translate-x-1/2 sm:size-12"
+        strokeWidth={1.8}
+        style={{ color: palette.starOutline, fill: palette.star }}
       />
       {rows.map((rowSize, rowIndex) => {
         const y = rows.length === 1 ? 50 : top + rowIndex * rowGap
@@ -87,23 +147,26 @@ export function FamilyTree({
         return Array.from({ length: rowSize }, (_, column) => {
           const member = members[index++]
           const Icon = ORNAMENT_ICONS[member.avatar_icon] ?? ORNAMENT_ICONS.gift
-          const x = 50 + ((column + 1) / (rowSize + 1) - 0.5) * 2 * halfWidth
+          const x =
+            rows.length > 3
+              ? 50 + (rowIndex % 2 === 0 ? -0.5 : 0.5) * halfWidth
+              : 50 + ((column + 1) / (rowSize + 1) - 0.5) * 2 * halfWidth
           return (
             <button
               aria-label={`${member.display_name}'s wish list${member.parentName ? `, child of ${member.parentName}` : ""}`}
-              className="family-ornament absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
+              className="family-ornament absolute flex min-h-11 min-w-11 -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
               key={member.id}
               onClick={() => onSelect(member.id)}
               style={{ left: `${x}%`, top: `${(y / 112) * 100}%` }}
               type="button"
             >
               <span
-                className="family-ornament-icon flex size-10 items-center justify-center sm:size-12"
+                className="family-ornament-icon flex size-8 items-center justify-center sm:size-12"
                 style={{ backgroundColor: colorOf(member.avatar_color) }}
               >
                 <Icon
                   aria-hidden="true"
-                  className="size-5 text-white sm:size-6"
+                  className="size-4 text-white sm:size-6"
                 />
               </span>
               <span className="family-ornament-name max-w-24 truncate">

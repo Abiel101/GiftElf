@@ -35,6 +35,7 @@ type TeamUp = Database["public"]["Tables"]["team_ups"]["Row"]
 type Props = {
   client: GiftElfSupabaseClient
   familyId: string
+  familyYear: number
   ownerId: string
   childId: string | null
   userId: string
@@ -43,6 +44,7 @@ type Props = {
   claims: Claim[]
   teamUps: TeamUp[]
   pendingId: string
+  loading: boolean
   refresh: () => Promise<void>
   claimGift: (id: string) => Promise<void>
   releaseClaim: (id: string) => Promise<void>
@@ -112,6 +114,7 @@ function categoryFromLegacy(category: string): GiftCategory {
 export function WishList({
   client,
   familyId,
+  familyYear,
   ownerId,
   childId,
   userId,
@@ -120,6 +123,7 @@ export function WishList({
   claims,
   teamUps,
   pendingId,
+  loading,
   refresh,
   claimGift,
   releaseClaim,
@@ -181,9 +185,8 @@ export function WishList({
     )
   }
 
-  async function createList(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const name = listName.trim()
+  async function createList(name: string, openItems = false) {
+    name = name.trim()
     if (!name) {
       notifyError("Enter a list name.")
       return
@@ -205,6 +208,11 @@ export function WishList({
       setListName("")
       setSelected([])
       await refresh()
+      if (openItems) {
+        setEditingId(null)
+        setForm(blankGift)
+        setFormOpen(true)
+      }
       notifySuccess("List created. Add your first item.")
     } catch (error) {
       report(error)
@@ -364,12 +372,23 @@ export function WishList({
     setFormOpen(true)
   }
 
+  if (loading) {
+    return (
+      <p className="rounded-xl bg-muted p-5 text-sm text-muted-foreground">
+        Loading lists…
+      </p>
+    )
+  }
+
   return (
     <div className="space-y-4">
-      {own && (
+      {own && selectedList && (
         <form
           className="flex flex-wrap gap-2"
-          onSubmit={(event) => void createList(event)}
+          onSubmit={(event) => {
+            event.preventDefault()
+            void createList(listName)
+          }}
         >
           <Input
             aria-label="New list name"
@@ -385,11 +404,22 @@ export function WishList({
         </form>
       )}
       {!selectedList ? (
-        <p className="rounded-xl bg-muted p-5 text-sm text-muted-foreground">
-          {own
-            ? "Create a list before adding items."
-            : "No lists have been created yet."}
-        </p>
+        <div className="space-y-3 rounded-xl bg-muted p-5">
+          <p className="text-sm text-muted-foreground">
+            {own
+              ? `Start your ${familyYear} wish list and add items.`
+              : "No lists have been created yet."}
+          </p>
+          {own && (
+            <Button
+              disabled={busy}
+              onClick={() => void createList(`${familyYear} Wish List`, true)}
+              type="button"
+            >
+              <Plus aria-hidden="true" /> Start {familyYear} list
+            </Button>
+          )}
+        </div>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2">

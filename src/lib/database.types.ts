@@ -5,8 +5,9 @@ type Table<Row, Insert, Update = Partial<Insert>> = {
   Relationships: []
 }
 
-export type TreeTheme = "classic" | "tokyo-night" | "mist" | "amber"
-export type AppTheme = "family" | TreeTheme | "cyberpunk"
+export type TreeTheme =
+  "classic" | "tokyo-night" | "mist" | "amber" | "cyberpunk"
+export type AppTheme = "family" | TreeTheme
 export type AvatarIcon =
   | "gift"
   | "bell"

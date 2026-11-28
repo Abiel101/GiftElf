@@ -1,21 +1,25 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type FormEvent,
+  type TouchEvent,
 } from "react"
 import {
   Camera,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Copy,
   Gift,
   ImagePlus,
   MoreHorizontal,
   Plus,
   RefreshCw,
+  Shuffle,
   Trash2,
   Users,
 } from "lucide-react"
@@ -97,6 +101,20 @@ const appThemes: { value: AppTheme; label: string; color: string }[] = [
   { value: "cyberpunk", label: "Cyberpunk", color: "#7c3aed" },
 ]
 const appStartedAt = Date.now()
+const treeNavigationColors: Record<TreeTheme, string> = {
+  classic: "#176b52",
+  "tokyo-night": "#435b95",
+  mist: "#285f70",
+  amber: "#80500f",
+  cyberpunk: "#6735a4",
+}
+const familyNavigationColors: Record<TreeTheme, string> = {
+  classic: "#982d3a",
+  "tokyo-night": "#704591",
+  mist: "#75505a",
+  amber: "#38634e",
+  cyberpunk: "#00615f",
+}
 
 function messageFromError(error: unknown) {
   return error instanceof Error
@@ -287,6 +305,7 @@ export function FamilyDashboard({
   const [shareAge, setShareAge] = useState(false)
   const [appTheme, setAppTheme] = useState<AppTheme>("family")
   const [isSavingTheme, setIsSavingTheme] = useState(false)
+  const [isSavingTreeTheme, setIsSavingTreeTheme] = useState(false)
   const [familyName, setFamilyName] = useState("")
   const [familyYear, setFamilyYear] = useState(String(new Date().getFullYear()))
   const [inviteCode, setInviteCode] = useState(
@@ -333,6 +352,18 @@ export function FamilyDashboard({
   const [clock, setClock] = useState(() => Date.now())
   const accountMenuContainer = useRef<HTMLElement>(null)
   const activeFamilyRef = useRef(activeFamilyId)
+  const treeTouchStart = useRef<{ x: number; y: number } | null>(null)
+  const suppressTreeClick = useRef(false)
+  const [mobileMenu, setMobileMenu] = useState(
+    () => window.matchMedia("(max-width: 639px)").matches
+  )
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)")
+    const update = () => setMobileMenu(query.matches)
+    query.addEventListener("change", update)
+    return () => query.removeEventListener("change", update)
+  }, [])
 
   useEffect(() => {
     activeFamilyRef.current = activeFamilyId
@@ -796,23 +827,38 @@ export function FamilyDashboard({
   }
 
   async function updateTreeTheme(theme: TreeTheme) {
-    if (!activeFamily || activeFamily.role !== "owner") return
-    const { error } = await client
-      .from("families")
-      .update({ tree_theme: theme })
-      .eq("id", activeFamily.id)
-    if (error) {
-      reportError(new Error(error.message))
+    if (!activeFamily || activeFamily.role !== "owner" || isSavingTreeTheme)
       return
-    }
-    setFamilies((current) =>
-      current.map((family) =>
-        family.id === activeFamily.id
-          ? { ...family, tree_theme: theme }
-          : family
+    setIsSavingTreeTheme(true)
+    try {
+      const { error } = await client
+        .from("families")
+        .update({ tree_theme: theme })
+        .eq("id", activeFamily.id)
+      if (error) throw new Error(error.message)
+      setFamilies((current) =>
+        current.map((family) =>
+          family.id === activeFamily.id
+            ? { ...family, tree_theme: theme }
+            : family
+        )
       )
+      notifySuccess(
+        `${TREE_THEMES[theme].label} tree theme shared with your family.`
+      )
+    } catch (error) {
+      reportError(error)
+    } finally {
+      setIsSavingTreeTheme(false)
+    }
+  }
+
+  function randomizeTreeTheme() {
+    if (!activeFamily) return
+    const choices = (Object.keys(TREE_THEMES) as TreeTheme[]).filter(
+      (theme) => theme !== activeFamily.tree_theme
     )
-    notifySuccess("Tree theme updated for everyone in the family.")
+    void updateTreeTheme(choices[Math.floor(Math.random() * choices.length)])
   }
 
   async function updateAppTheme(theme: AppTheme) {
@@ -1087,6 +1133,31 @@ export function FamilyDashboard({
     setActiveFamilyId(id)
   }
 
+  function handleTreeTouchStart(event: TouchEvent<HTMLDivElement>) {
+    if (!mobileMenu || event.touches.length !== 1) {
+      treeTouchStart.current = null
+      return
+    }
+    const touch = event.touches[0]
+    treeTouchStart.current = { x: touch.clientX, y: touch.clientY }
+  }
+
+  function handleTreeTouchEnd(event: TouchEvent<HTMLDivElement>) {
+    const start = treeTouchStart.current
+    treeTouchStart.current = null
+    if (!start || event.changedTouches.length !== 1) return
+    const touch = event.changedTouches[0]
+    const dx = touch.clientX - start.x
+    const dy = touch.clientY - start.y
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.4) return
+    suppressTreeClick.current = true
+    window.setTimeout(() => {
+      suppressTreeClick.current = false
+    }, 400)
+    const target = dx < 0 ? nextFamily : previousFamily
+    if (target) selectFamily(target.id)
+  }
+
   useEffect(() => {
     const timer = window.setInterval(() => setClock(Date.now()), 60_000)
     return () => window.clearInterval(timer)
@@ -1114,44 +1185,142 @@ export function FamilyDashboard({
   const navClass = (selected: boolean) =>
     `app-nav-link rounded-full px-4 py-2 text-sm font-semibold ${selected ? "is-active" : ""}`
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement
     const meta = document.querySelector('meta[name="theme-color"]')
+    const previousTheme = root.getAttribute("data-app-theme")
     const previousMetaColor = meta?.getAttribute("content")
-    root.dataset.appTheme = visualTheme
-    const bg = getComputedStyle(
-      document.querySelector(".app-background") ?? root
-    ).getPropertyValue("--app-via")
-    if (meta && bg) meta.setAttribute("content", bg.trim())
     return () => {
-      delete root.dataset.appTheme
+      if (previousTheme === null) delete root.dataset.appTheme
+      else root.dataset.appTheme = previousTheme
       if (meta && previousMetaColor !== undefined) {
         if (previousMetaColor === null) meta.removeAttribute("content")
         else meta.setAttribute("content", previousMetaColor)
       }
     }
+  }, [])
+
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    const meta = document.querySelector('meta[name="theme-color"]')
+    root.dataset.appTheme = visualTheme
+    const bg = getComputedStyle(
+      document.querySelector(".app-background") ?? root
+    ).getPropertyValue("--app-via-target")
+    if (meta && bg) meta.setAttribute("content", bg.trim())
   }, [visualTheme])
 
   return (
     <div className="space-y-6">
       <header
-        className="relative flex items-center gap-3"
+        className="fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-40"
         ref={accountMenuContainer}
       >
         <Menu.Root>
           <Menu.Trigger
-            aria-label="Account menu"
-            className="flex size-11 shrink-0 items-center justify-center rounded-full border-2 border-border shadow-sm transition hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            style={{ backgroundColor: avatarColor }}
+            aria-label="Open navigation and account menu"
+            className="flex min-h-11 items-center gap-3 rounded-xl border-2 border-white/40 px-3 py-2 font-semibold text-white shadow-xl transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            style={{
+              backgroundColor:
+                treeNavigationColors[activeFamily?.tree_theme ?? "classic"],
+            }}
           >
-            <AccountIcon aria-hidden="true" className="size-5 text-[#171717]" />
+            <span
+              className="hidden size-9 items-center justify-center rounded-full border-2 border-white/70 sm:flex"
+              style={{ backgroundColor: avatarColor }}
+            >
+              <AccountIcon
+                aria-hidden="true"
+                className="size-5 text-[#171717]"
+              />
+            </span>
+            <span className="hidden max-w-36 truncate text-sm sm:block">
+              {displayName || "Menu"}
+            </span>
+            <ChevronLeft aria-hidden="true" className="size-5 sm:hidden" />
+            <ChevronUp aria-hidden="true" className="hidden size-5 sm:block" />
           </Menu.Trigger>
           <Menu.Portal className="absolute" container={accountMenuContainer}>
-            <Menu.Positioner align="start" className="z-50" sideOffset={8}>
-              <Menu.Popup className="min-w-52 rounded-xl border border-border bg-background p-2 text-foreground shadow-xl outline-none">
+            <Menu.Positioner
+              align="end"
+              className="z-50"
+              side={mobileMenu ? "left" : "top"}
+              sideOffset={8}
+            >
+              <Menu.Popup
+                className="account-menu-popup max-h-[min(70dvh,32rem)] w-56 max-w-[calc(100vw-5rem)] overflow-y-auto rounded-xl border border-border bg-background p-2 text-foreground shadow-xl outline-none"
+                data-mobile={mobileMenu}
+              >
                 <p className="max-w-60 truncate px-3 py-2 text-xs text-muted-foreground">
                   {displayName || user.email}
                 </p>
+                <Menu.Item
+                  aria-current={view === "tree" ? "page" : undefined}
+                  className="mb-1 cursor-pointer rounded-lg px-3 py-2 text-sm font-semibold text-white outline-none data-highlighted:brightness-125"
+                  onClick={() => navigate("/tree")}
+                  style={{
+                    backgroundColor:
+                      treeNavigationColors[
+                        activeFamily?.tree_theme ?? "classic"
+                      ],
+                  }}
+                >
+                  Tree{view === "tree" ? " · Current" : ""}
+                </Menu.Item>
+                <Menu.Item
+                  aria-current={view === "family" ? "page" : undefined}
+                  className="mb-1 cursor-pointer rounded-lg px-3 py-2 text-sm font-semibold text-white outline-none data-highlighted:brightness-125"
+                  onClick={() => navigate("/family")}
+                  style={{
+                    backgroundColor:
+                      familyNavigationColors[
+                        activeFamily?.tree_theme ?? "classic"
+                      ],
+                  }}
+                >
+                  Family{view === "family" ? " · Current" : ""}
+                </Menu.Item>
+                {showTeamUpsTab && (
+                  <Menu.Item
+                    className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium outline-none data-highlighted:bg-muted"
+                    onClick={() => navigate("/team-ups")}
+                  >
+                    Team-ups
+                  </Menu.Item>
+                )}
+                {families.length > 1 && (
+                  <>
+                    <p className="mt-2 border-t border-border px-3 pt-3 pb-1 text-xs font-semibold text-muted-foreground">
+                      Switch family tree
+                    </p>
+                    {families.map((family) => (
+                      <Menu.Item
+                        aria-current={
+                          family.id === activeFamilyId ? "true" : undefined
+                        }
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium outline-none data-highlighted:bg-muted"
+                        key={family.id}
+                        onClick={() => selectFamily(family.id)}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="size-3 shrink-0 rounded-full border border-foreground"
+                          style={{
+                            backgroundColor:
+                              TREE_THEMES[family.tree_theme].tiers[2],
+                          }}
+                        />
+                        <span className="min-w-0 flex-1 truncate">
+                          {family.name} · {family.year}
+                        </span>
+                        {family.id === activeFamilyId && (
+                          <span aria-hidden="true">✓</span>
+                        )}
+                      </Menu.Item>
+                    ))}
+                  </>
+                )}
+                <div className="mt-2 border-t border-border pt-1" />
                 <Menu.Item
                   className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium outline-none data-highlighted:bg-muted"
                   onClick={() => navigate("/profile")}
@@ -1176,29 +1345,6 @@ export function FamilyDashboard({
             </Menu.Positioner>
           </Menu.Portal>
         </Menu.Root>
-
-        <nav
-          aria-label="Gift Elf sections"
-          className="app-nav flex flex-wrap gap-2"
-        >
-          <NavLink className={({ isActive }) => navClass(isActive)} to="/tree">
-            Tree
-          </NavLink>
-          <NavLink
-            className={({ isActive }) => navClass(isActive)}
-            to="/family"
-          >
-            Family
-          </NavLink>
-          {showTeamUpsTab && (
-            <NavLink
-              className={({ isActive }) => navClass(isActive)}
-              to="/team-ups"
-            >
-              Team-ups
-            </NavLink>
-          )}
-        </nav>
       </header>
 
       {view !== "tree" && families.length > 0 && (
@@ -1220,130 +1366,154 @@ export function FamilyDashboard({
       )}
 
       {view === "tree" && (
-        <section className="h-fullpage-transition">
-          <div className="min-w-0 overflow-hidden px-1 py-2 sm:p-5">
-            <h2 className="text-center text-2xl font-bold">
+        <section className="tree-page h-fullpage-transition">
+          <div className="tree-page-heading">
+            <h2 className="max-w-2xl font-mono text-3xl font-black tracking-tight break-words text-[color:var(--tree-heading)] sm:text-5xl lg:text-6xl">
               {activeFamily ? activeFamily.name : "Your family tree"}
             </h2>
             <p
-              className="mt-1 text-center text-sm font-semibold"
+              className="mt-2 font-mono text-sm font-semibold sm:text-base"
               aria-live="polite"
             >
               {daysUntilChristmas === 0
                 ? "Merry Christmas!"
                 : `${daysUntilChristmas} days until Christmas`}
             </p>
-            {detailsFamilyId === activeFamilyId &&
-            details.members.length > 0 ? (
-              <div
-                className={`tree-slide tree-slide--${treeDirection}`}
-                key={activeFamilyId}
-              >
-                <p className="mb-4 text-center text-sm">
-                  Pick an ornament to see that person&rsquo;s wish list.
-                </p>
-                <div className="tree-scene relative mx-auto max-w-4xl">
-                  {previousFamily && (
-                    <div
-                      aria-hidden="true"
-                      className="tree-neighbor tree-neighbor--left"
-                    >
-                      <FamilyTree
-                        currentUserId={user.id}
-                        members={[]}
-                        theme={previousFamily.tree_theme}
-                        onSelect={openList}
-                      />
-                    </div>
-                  )}
-                  {nextFamily && (
-                    <div
-                      aria-hidden="true"
-                      className="tree-neighbor tree-neighbor--right"
-                    >
-                      <FamilyTree
-                        currentUserId={user.id}
-                        members={[]}
-                        theme={nextFamily.tree_theme}
-                        onSelect={openList}
-                      />
-                    </div>
-                  )}
-                  <div className="relative z-10">
-                    <FamilyTree
-                      currentUserId={user.id}
-                      members={treeMembers}
-                      theme={activeFamily?.tree_theme ?? "classic"}
-                      onSelect={openList}
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="py-8 text-center text-sm">
-                {isLoading ||
-                (activeFamilyId && detailsFamilyId !== activeFamilyId)
-                  ? "Decorating the tree..."
-                  : "Create or join a family to hang your ornaments."}{" "}
-                {!isLoading && !activeFamilyId && (
-                  <NavLink className="font-bold underline" to="/family">
-                    Go to Family
-                  </NavLink>
-                )}
-              </p>
-            )}
             {families.length > 1 && (
-              <nav
-                aria-label="Choose family tree"
-                className="mt-4 flex flex-wrap items-center justify-center gap-2"
-              >
-                <button
-                  aria-label="Previous tree"
-                  className="flex size-11 shrink-0 items-center justify-center rounded-full bg-background text-foreground shadow-sm transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40"
-                  disabled={!previousFamily}
-                  onClick={() =>
-                    previousFamily && selectFamily(previousFamily.id)
-                  }
-                  type="button"
-                >
-                  <ChevronLeft aria-hidden="true" className="size-5" />
-                </button>
-                <div className="flex max-w-full flex-wrap justify-center gap-1">
-                  {families.map((family) => (
-                    <button
-                      aria-current={
-                        family.id === activeFamilyId ? "true" : undefined
-                      }
-                      aria-label={`${family.name} (${family.year})`}
-                      className="flex size-11 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                      key={family.id}
-                      onClick={() => selectFamily(family.id)}
-                      title={`${family.name} · ${family.year}`}
-                      type="button"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={`size-5 rounded-full border-2 border-background shadow-sm ${family.id === activeFamilyId ? "ring-2 ring-foreground ring-offset-2 ring-offset-background" : ""}`}
-                        style={{
-                          backgroundColor:
-                            TREE_THEMES[family.tree_theme].tiers[2],
-                        }}
-                      />
-                    </button>
-                  ))}
-                </div>
-                <button
-                  aria-label="Next tree"
-                  className="flex size-11 shrink-0 items-center justify-center rounded-full bg-background text-foreground shadow-sm transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40"
-                  disabled={!nextFamily}
-                  onClick={() => nextFamily && selectFamily(nextFamily.id)}
-                  type="button"
-                >
-                  <ChevronRight aria-hidden="true" className="size-5" />
-                </button>
-              </nav>
+              <p className="mt-1 text-xs sm:hidden">Swipe to switch trees.</p>
             )}
           </div>
+          <div
+            aria-label="Family tree"
+            className="tree-page-scroll"
+            key={activeFamilyId}
+            role="region"
+            tabIndex={0}
+          >
+            <div className="tree-page-stage">
+              {detailsFamilyId === activeFamilyId &&
+              details.members.length > 0 ? (
+                <div
+                  className={`tree-slide tree-slide--${treeDirection}`}
+                  key={activeFamilyId}
+                >
+                  <div
+                    className="tree-scene relative mx-auto max-w-5xl touch-pan-y"
+                    onTouchStart={handleTreeTouchStart}
+                    onTouchCancel={() => {
+                      treeTouchStart.current = null
+                    }}
+                    onTouchEnd={handleTreeTouchEnd}
+                    onClickCapture={(event) => {
+                      if (suppressTreeClick.current) {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        suppressTreeClick.current = false
+                      }
+                    }}
+                  >
+                    {previousFamily && (
+                      <div
+                        aria-hidden="true"
+                        className="tree-neighbor tree-neighbor--left"
+                      >
+                        <FamilyTree
+                          currentUserId={user.id}
+                          members={[]}
+                          theme={previousFamily.tree_theme}
+                          onSelect={openList}
+                        />
+                      </div>
+                    )}
+                    {nextFamily && (
+                      <div
+                        aria-hidden="true"
+                        className="tree-neighbor tree-neighbor--right"
+                      >
+                        <FamilyTree
+                          currentUserId={user.id}
+                          members={[]}
+                          theme={nextFamily.tree_theme}
+                          onSelect={openList}
+                        />
+                      </div>
+                    )}
+                    <div className="relative z-10">
+                      <FamilyTree
+                        currentUserId={user.id}
+                        members={treeMembers}
+                        theme={activeFamily?.tree_theme ?? "classic"}
+                        onSelect={openList}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="py-8 text-center text-sm">
+                  {isLoading ||
+                  (activeFamilyId && detailsFamilyId !== activeFamilyId)
+                    ? "Decorating the tree..."
+                    : "Create or join a family to hang your ornaments."}{" "}
+                  {!isLoading && !activeFamilyId && (
+                    <NavLink className="font-bold underline" to="/family">
+                      Go to Family
+                    </NavLink>
+                  )}
+                </p>
+              )}
+            </div>
+          </div>
+          {families.length > 1 && (
+            <nav
+              aria-label="Choose family tree"
+              className="tree-page-navigation hidden flex-wrap items-center justify-center gap-2 sm:flex"
+            >
+              <button
+                aria-label="Previous tree"
+                className="flex size-11 shrink-0 items-center justify-center rounded-full bg-background text-foreground shadow-sm transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40"
+                disabled={!previousFamily}
+                onClick={() =>
+                  previousFamily && selectFamily(previousFamily.id)
+                }
+                type="button"
+              >
+                <ChevronLeft aria-hidden="true" className="size-5" />
+              </button>
+              <div className="flex max-w-full flex-wrap justify-center gap-1">
+                {families.map((family) => (
+                  <button
+                    aria-current={
+                      family.id === activeFamilyId ? "true" : undefined
+                    }
+                    aria-label={`${family.name} (${family.year})`}
+                    className="flex size-11 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    key={family.id}
+                    onClick={() => selectFamily(family.id)}
+                    title={`${family.name} · ${family.year}`}
+                    type="button"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`size-5 rounded-full border-2 border-background shadow-sm ${family.id === activeFamilyId ? "ring-2 ring-foreground ring-offset-2 ring-offset-background" : ""}`}
+                      style={{
+                        backgroundColor:
+                          TREE_THEMES[family.tree_theme].tiers[2],
+                      }}
+                    />
+                  </button>
+                ))}
+              </div>
+              <button
+                aria-label="Next tree"
+                className="flex size-11 shrink-0 items-center justify-center rounded-full bg-background text-foreground shadow-sm transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40"
+                disabled={!nextFamily}
+                onClick={() => nextFamily && selectFamily(nextFamily.id)}
+                type="button"
+              >
+                <ChevronRight aria-hidden="true" className="size-5" />
+              </button>
+            </nav>
+          )}
         </section>
       )}
 
@@ -1546,6 +1716,7 @@ export function FamilyDashboard({
                                 <button
                                   aria-pressed={activeFamily.tree_theme === key}
                                   className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold ${activeFamily.tree_theme === key ? "border-accent-red ring-2 ring-accent-red/30" : "border-border"}`}
+                                  disabled={isSavingTreeTheme}
                                   key={key}
                                   onClick={() => void updateTreeTheme(key)}
                                   type="button"
@@ -1563,8 +1734,17 @@ export function FamilyDashboard({
                               )
                             )}
                           </div>
+                          <Button
+                            disabled={isSavingTreeTheme}
+                            onClick={randomizeTreeTheme}
+                            type="button"
+                            variant="outline"
+                          >
+                            <Shuffle aria-hidden="true" /> Random theme
+                          </Button>
                           <p className="text-xs text-muted-foreground">
-                            This tree theme is shared with every family member.
+                            Random chooses a coordinated palette. The tree theme
+                            is shared with every family member.
                           </p>
                         </section>
                         <section className="space-y-2 border-t border-border pt-4">
@@ -1597,21 +1777,21 @@ export function FamilyDashboard({
                     <div className="contents" key={member.id}>
                       <button
                         aria-label={`${member.display_name}'s wish lists`}
-                        className="flex w-20 flex-col items-center gap-1 text-center text-sm font-medium text-lighter-black hover:underline"
+                        className="flex w-28 flex-col items-center gap-1 text-center text-sm font-medium text-lighter-black hover:underline sm:w-32"
                         onClick={() => openList(member.id)}
                         type="button"
                       >
-                        <Avatar className="size-14" size="lg">
+                        <Avatar className="size-20 sm:size-24">
                           <AvatarFallback
                             style={{ backgroundColor: member.avatar_color }}
                           >
                             <Icon
                               aria-hidden="true"
-                              className="size-6 text-[#171717]"
+                              className="size-8 text-[#171717]"
                             />
                           </AvatarFallback>
                         </Avatar>
-                        <span className="w-full wrap-break-words">
+                        <span className="wrap-break-words w-full">
                           {member.display_name}
                         </span>
                         {member.role === "owner" && (
@@ -1624,7 +1804,7 @@ export function FamilyDashboard({
                         .filter((child) => child.parent_id === member.id)
                         .map((child) => (
                           <div
-                            className="flex w-20 flex-col items-center text-center"
+                            className="flex w-28 flex-col items-center text-center sm:w-32"
                             key={child.id}
                           >
                             <button
@@ -1633,7 +1813,7 @@ export function FamilyDashboard({
                               onClick={() => openList(child.id)}
                               type="button"
                             >
-                              <Avatar className="size-14" size="lg">
+                              <Avatar className="size-20 sm:size-24">
                                 <AvatarFallback
                                   style={{
                                     backgroundColor: member.avatar_color,
@@ -1641,11 +1821,11 @@ export function FamilyDashboard({
                                 >
                                   <Icon
                                     aria-hidden="true"
-                                    className="size-6 text-[#171717]"
+                                    className="size-8 text-[#171717]"
                                   />
                                 </AvatarFallback>
                               </Avatar>
-                              <span className="w-full wrap-break-words">
+                              <span className="wrap-break-words w-full">
                                 {child.display_name}
                               </span>
                               <span className="text-xs text-muted-foreground">
@@ -2057,6 +2237,7 @@ export function FamilyDashboard({
                     key={`${activeFamily.id}:${listOwnerId}:${childId ?? ""}`}
                     client={client}
                     familyId={activeFamily.id}
+                    familyYear={activeFamily.year}
                     ownerId={listOwnerId}
                     childId={childId ?? null}
                     userId={user.id}
@@ -2065,6 +2246,7 @@ export function FamilyDashboard({
                     claims={details.claims}
                     teamUps={details.teamUps}
                     pendingId={pendingId}
+                    loading={detailsFamilyId !== activeFamily.id}
                     refresh={() => refreshDetails(activeFamily.id)}
                     claimGift={claimGift}
                     releaseClaim={releaseClaim}
