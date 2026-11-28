@@ -4,6 +4,7 @@ import type { Session } from "@supabase/supabase-js"
 
 import { AuthPanel } from "@/components/auth-panel"
 import { BrandShell } from "@/components/brand-shell"
+import { PixelTree } from "@/components/pixel-art"
 import { FamilyDashboard } from "@/components/family-dashboard"
 import { SupabaseSetup } from "@/components/supabase-setup"
 import type { GiftElfSupabaseClient } from "@/lib/supabase"
@@ -103,9 +104,11 @@ function AuthenticatedApp({ client }: AuthenticatedAppProps) {
       <BrandShell>
         <div
           aria-live="polite"
-          className="mx-auto max-w-xl rounded-2xl bg-white p-8 text-center text-sm text-muted-foreground shadow-lg"
+          className="pixel-loader mx-auto max-w-xl rounded-2xl bg-white p-8 text-lighter-black shadow-lg"
+          role="status"
         >
-          Preparing your family space...
+          <PixelTree className="h-40 w-auto" />
+          <p className="pixel-loader-text">Decorating your tree</p>
         </div>
       </BrandShell>
     )
