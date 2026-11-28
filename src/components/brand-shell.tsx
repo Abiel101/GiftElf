@@ -50,7 +50,7 @@ function LandingShell({ children }: { children: ReactNode }) {
               <div className="intro-lockup flex items-center gap-3">
                 <h1 className="drop-shadow-[0_4px_16px_rgba(80,0,8,0.3)]">
                   <span className="sr-only">GiftElf</span>
-                  <PixelLogo className="h-9 w-auto sm:h-12" />
+                  <PixelLogo className="h-12 w-auto sm:h-16" shadow="#9c2433" />
                 </h1>
                 <Sparkles className="intro-sparkle size-6 text-[#ffe18b]" />
               </div>
@@ -74,7 +74,7 @@ function LandingShell({ children }: { children: ReactNode }) {
               </div>
               <h1>
                 <span className="sr-only">GiftElf</span>
-                <PixelLogo className="h-8 w-auto drop-shadow-[0_3px_0_rgba(80,0,8,0.35)] sm:h-12 lg:h-14" />
+                <PixelLogo className="h-12 w-auto sm:h-16 lg:h-20" />
               </h1>
             </div>
             <p className="mt-2 text-sm font-semibold text-white/90 sm:mt-3 sm:text-lg">

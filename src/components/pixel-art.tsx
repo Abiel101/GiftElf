@@ -154,37 +154,63 @@ export function PixelElf({ className }: { className?: string }) {
   )
 }
 
-// 5x5 bitmap letters for the wordmark.
+// 7-row bitmap letters for the wordmark ("GiftElf").
 const FONT: Record<string, string[]> = {
-  G: ["XXXXX", "X....", "X.XXX", "X...X", "XXXXX"],
-  I: ["XXXXX", "..X..", "..X..", "..X..", "XXXXX"],
-  F: ["XXXXX", "X....", "XXXX.", "X....", "X...."],
-  T: ["XXXXX", "..X..", "..X..", "..X..", "..X.."],
-  E: ["XXXXX", "X....", "XXXX.", "X....", "XXXXX"],
-  L: ["X....", "X....", "X....", "X....", "XXXXX"],
+  G: [".XXX.", "X...X", "X....", "X.XXX", "X...X", "X...X", ".XXX."],
+  i: [".X.", "...", "XX.", ".X.", ".X.", ".X.", "XXX"],
+  f: [".XXX", ".X..", "XXX.", ".X..", ".X..", ".X..", ".X.."],
+  t: [".X..", ".X..", "XXX.", ".X..", ".X..", ".X..", "..XX"],
+  E: ["XXXXX", "X....", "X....", "XXXX.", "X....", "X....", "XXXXX"],
+  l: ["XX.", ".X.", ".X.", ".X.", ".X.", ".X.", "XXX"],
 }
 
+// Draws the word in two colors with a 1px retro drop shadow ("S").
 function wordmarkRows(word: string, split: number) {
-  const rows = ["", "", "", "", ""]
-  ;[...word].forEach((letter, index) => {
-    const glyph = FONT[letter]
+  const height = 7
+  const letters = [...word].map((letter, index) => ({
+    glyph: FONT[letter],
+    color: index < split ? "W" : "Y",
+  }))
+  const width =
+    letters.reduce((sum, { glyph }) => sum + glyph[0].length + 1, -1) + 1
+  const grid = Array.from({ length: height + 1 }, () =>
+    Array<string>(width).fill(".")
+  )
+  let offset = 0
+  for (const { glyph } of letters) {
     glyph.forEach((line, y) => {
-      const color = index < split ? "W" : "Y"
-      rows[y] +=
-        line.replace(/X/g, color) + (index < word.length - 1 ? "." : "")
+      for (let x = 0; x < line.length; x++) {
+        if (line[x] === "X") grid[y + 1][offset + x + 1] = "S"
+      }
     })
-  })
-  return rows
+    offset += glyph[0].length + 1
+  }
+  offset = 0
+  for (const { glyph, color } of letters) {
+    glyph.forEach((line, y) => {
+      for (let x = 0; x < line.length; x++) {
+        if (line[x] === "X") grid[y][offset + x] = color
+      }
+    })
+    offset += glyph[0].length + 1
+  }
+  return grid.map((row) => row.join(""))
 }
 
-const LOGO_ROWS = wordmarkRows("GIFTELF", 4)
+const LOGO_ROWS = wordmarkRows("GiftElf", 4)
 
-export function PixelLogo({ className }: { className?: string }) {
+export function PixelLogo({
+  className,
+  shadow = "#14684d",
+}: {
+  className?: string
+  shadow?: string
+}) {
   return (
     <PixelSprite
       className={className}
       order="left-right"
-      palette={{ W: "#ffffff", Y: "#ffe18b" }}
+      palette={{ W: "#ffffff", Y: "#ffe18b", S: shadow }}
       rows={LOGO_ROWS}
       stepMs={22}
     />
