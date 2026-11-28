@@ -13,7 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
-import type { AvatarIcon, TreeTheme } from "@/lib/database.types"
+import type { AppTheme, AvatarIcon, TreeTheme } from "@/lib/database.types"
 
 export const ORNAMENT_ICONS: Record<AvatarIcon, LucideIcon> = {
   gift: Gift,
@@ -76,6 +76,20 @@ export const TREE_THEMES: Record<TreeTheme, TreeThemeDef> = {
     trunk: "#6b4226",
     star: "#fff1c4",
     background: "#fff6e6",
+  },
+}
+
+export const PERSONAL_TREE_THEMES: Record<
+  Exclude<AppTheme, "family">,
+  TreeThemeDef
+> = {
+  ...TREE_THEMES,
+  cyberpunk: {
+    label: "Cyberpunk",
+    tiers: ["#56e8e1", "#32b7e9", "#c264f2", "#9235d4"],
+    trunk: "#a665e0",
+    star: "#ffe768",
+    background: "#291451",
   },
 }
 

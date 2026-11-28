@@ -5,7 +5,7 @@ Gift Elf is a family Christmas wish-list app built with React, TypeScript, Vite,
 ## Supabase setup
 
 1. Create a Supabase project.
-2. In the Supabase SQL Editor, run the files in [`supabase/migrations`](./supabase/migrations) in filename order. For an existing project, run any migrations that have not yet been applied, including `20261128030000_personal_app_theme.sql`.
+2. In the Supabase SQL Editor, run the files in [`supabase/migrations`](./supabase/migrations) in filename order. For an existing project, run all migrations that have not yet been applied, through `20261128060000_owner_invite_settings.sql`, before using the updated app.
 3. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from the project's API settings. `VITE_SUPABASE_ANON_KEY` is also supported for older projects. These are browser-safe project values; never put a `service_role` key in the app.
 4. Enable email/password authentication in Supabase. If email confirmation is on, new users need to confirm before signing in.
 
@@ -38,8 +38,12 @@ creates their account automatically. The migration's `on_auth_user_created`
 trigger also creates their GiftElf profile and private profile, so they can
 continue without completing a separate email sign-up.
 
-Family owners can regenerate an invite, immediately invalidating the old link,
-QR code, and typed code. The owner can delete a family only while they are its
+Family owners manage invitations in the Family page's settings sheet. Only
+owners can retrieve the invite code, copy its link, regenerate it, or set its
+expiration date (up to December 31 of the family year, in UTC). Regeneration
+immediately invalidates the old link, QR code, and typed code. Invite links are
+reusable, so anyone who receives one can still forward it until it expires or
+is regenerated. The owner can delete a family only while they are its
 sole member; deletion also removes that family's gifts and invitations. To
 join, enter the invite code manually or scan its QR code from the Family page.
 Camera scanning requires camera permission and a secure context (HTTPS, or
@@ -47,8 +51,17 @@ localhost for development). Invite and email confirmation redirect URLs must be
 allowed in Supabase URL Configuration.
 
 Each user can choose an account-saved app theme in their profile, including
-Cyberpunk. The default follows the active family's tree theme; a personal
-choice changes only that user's app colors, not the shared tree.
+Cyberpunk. The Tree page always shows the selected family's shared theme;
+elsewhere, the personal theme applies unless "Match family" is selected.
+
+Lists belong to a person within one family. Create a list before adding items;
+other family members can see it and claim gifts without revealing claims to
+the owner. Existing gifts are moved into a default "Wish list" by the migration.
+Parents can add children to a specific family from its member roster and manage
+separate lists for each child. Children do not have sign-in accounts; the
+parent cannot see claims or team-up activity on their children's gifts.
+Removing a child also permanently removes their lists and associated gifts,
+claims, and team-ups from that family.
 
 ## Development
 

@@ -8,8 +8,8 @@
 @theme inline {
   --font-sans: "Inter", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
-  --color-accent-red: #c52d3a;
-  --color-lighter-black: #222222;
+  --color-accent-red: var(--app-accent, #c52d3a);
+  --color-lighter-black: var(--app-surface-fg, #222222);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -274,6 +274,22 @@ body:has(.intro-overlay) {
   --app-via: #bf2d3d;
   --app-to: #a82035;
   --app-fg: #ffffff;
+  --app-surface: #ffffff;
+  --app-surface-fg: #222222;
+  --app-accent: #c52d3a;
+  --background: var(--app-surface);
+  --foreground: var(--app-surface-fg);
+  --muted: #f3f3f3;
+  --muted-foreground: #595959;
+  --secondary: var(--muted);
+  --secondary-foreground: var(--foreground);
+  --accent: var(--muted);
+  --accent-foreground: var(--foreground);
+  --border: #d3d3d3;
+  --input: var(--border);
+  --ring: var(--app-accent);
+  --primary: #c52d3a;
+  --primary-foreground: #ffffff;
   background: linear-gradient(
     to bottom,
     var(--app-from) 0%,
@@ -290,6 +306,13 @@ html[data-app-theme="tokyo-night"] .app-background {
   --app-via: #1a1b26;
   --app-to: #16161e;
   --app-fg: #c0caf5;
+  --app-surface: #242a3e;
+  --app-surface-fg: #f0f3ff;
+  --app-accent: #c2d0ff;
+  --muted: #343c54;
+  --muted-foreground: #ccd3e8;
+  --border: #72809c;
+  --primary: #435b95;
 }
 
 html[data-app-theme="mist"] .app-background {
@@ -297,6 +320,13 @@ html[data-app-theme="mist"] .app-background {
   --app-via: #dbe7eb;
   --app-to: #b8cfd6;
   --app-fg: #222222;
+  --app-surface: #f5fbfb;
+  --app-surface-fg: #173a43;
+  --app-accent: #235d70;
+  --muted: #e1eff0;
+  --muted-foreground: #46636b;
+  --border: #a3bec4;
+  --primary: #285f70;
 }
 
 html[data-app-theme="amber"] .app-background {
@@ -304,6 +334,13 @@ html[data-app-theme="amber"] .app-background {
   --app-via: #ffe3ac;
   --app-to: #f5b73b;
   --app-fg: #222222;
+  --app-surface: #fff9ed;
+  --app-surface-fg: #472e18;
+  --app-accent: #84460f;
+  --muted: #f6e8cd;
+  --muted-foreground: #735533;
+  --border: #ceb385;
+  --primary: #80500f;
 }
 
 html[data-app-theme="cyberpunk"] .app-background {
@@ -311,14 +348,18 @@ html[data-app-theme="cyberpunk"] .app-background {
   --app-via: #291451;
   --app-to: #160e35;
   --app-fg: #f9f4ff;
+  --app-surface: #251b38;
+  --app-surface-fg: #fbf3ff;
+  --app-accent: #e9baff;
+  --muted: #39294c;
+  --muted-foreground: #dfcfe8;
+  --border: #806893;
+  --primary: #6735a4;
 }
 
 .app-background .bg-white {
-  color: #222222;
-}
-
-html[data-app-theme="cyberpunk"] .app-background .bg-white {
-  background-color: #faf7ff;
+  background-color: var(--app-surface);
+  color: var(--app-surface-fg);
 }
 
 html[data-app-theme="cyberpunk"]
@@ -329,8 +370,8 @@ html[data-app-theme="cyberpunk"]
 }
 
 .app-nav-link {
-  background: rgba(255, 255, 255, 0.92);
-  color: #222222;
+  background: var(--background);
+  color: var(--foreground);
   transition:
     transform 180ms ease,
     box-shadow 180ms steps(3, end),
@@ -343,14 +384,12 @@ html[data-app-theme="cyberpunk"]
 }
 
 .app-nav-link.is-active {
-  background: #c52d3a;
-  color: #ffffff;
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 
 html[data-app-theme="cyberpunk"] .app-nav-link.is-active {
-  background: #41217b;
   box-shadow: 3px 3px 0 #38e8e0;
-  color: #ffffff;
 }
 
 .page-transition {
@@ -404,34 +443,45 @@ html[data-app-theme="cyberpunk"] .app-nav-link.is-active {
   }
 }
 
-@media (max-width: 639px) {
-  .app-nav {
-    position: fixed;
-    inset: auto 0.75rem calc(0.75rem + env(safe-area-inset-bottom)) 0.75rem;
-    z-index: 40;
-    display: flex;
-    justify-content: space-around;
-    gap: 0.25rem;
-    padding: 0.35rem;
-    border-radius: 9999px;
-    background: rgba(255, 255, 255, 0.85);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-    backdrop-filter: blur(14px);
-  }
+.tree-slide {
+  animation: tree-slide-in 380ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
 
-  .app-nav .app-nav-link {
-    flex: 1;
-    padding: 0.6rem 0.5rem;
-    text-align: center;
-    background: transparent;
-  }
+.tree-neighbor {
+  position: absolute;
+  bottom: 8%;
+  width: 35%;
+  opacity: 0.25;
+  filter: grayscale(0.35);
+  pointer-events: none;
+}
 
-  .app-nav .app-nav-link.is-active {
-    background: #c52d3a;
-  }
+.tree-neighbor--left {
+  left: 0;
+  transform: perspective(600px) rotateY(25deg);
+}
 
-  html[data-app-theme="cyberpunk"] .app-nav .app-nav-link.is-active {
-    background: #41217b;
+.tree-neighbor--right {
+  right: 0;
+  transform: perspective(600px) rotateY(-25deg);
+}
+
+.tree-slide--left {
+  --tree-slide-offset: -3rem;
+}
+
+.tree-slide--right {
+  --tree-slide-offset: 3rem;
+}
+
+@keyframes tree-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--tree-slide-offset)) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
   }
 }
 
@@ -661,6 +711,7 @@ html[data-app-theme="cyberpunk"] .app-nav-link.is-active {
   }
 
   .page-transition,
+  .tree-slide,
   .page-transition::before,
   .intro-stage::after,
   .app-nav-link {

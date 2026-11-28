@@ -2,46 +2,60 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react"
 import {
-  Check,
   Camera,
+  ChevronLeft,
+  ChevronRight,
   Copy,
-  ExternalLink,
   Gift,
   ImagePlus,
-  Pencil,
+  MoreHorizontal,
   Plus,
   RefreshCw,
   Trash2,
   Users,
 } from "lucide-react"
+import { Menu } from "@base-ui/react/menu"
 import { QRCodeSVG } from "qrcode.react"
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom"
 import type { User } from "@supabase/supabase-js"
 
 import { FamilyTree } from "@/components/family-tree"
 import { InviteScanner } from "@/components/invite-scanner"
+import { WishList } from "@/components/wish-list"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { gifts as originalWishList } from "@/data/gifts"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type {
   AppTheme,
   AvatarIcon,
   Database,
-  GiftCategory,
   TreeTheme,
 } from "@/lib/database.types"
-import { fetchLinkPreview } from "@/lib/link-preview"
 import { notifyError, notifyInfo, notifySuccess } from "@/lib/notifications"
 import { ORNAMENT_COLORS, ORNAMENT_ICONS, TREE_THEMES } from "@/lib/tree-theme"
 import type { GiftElfSupabaseClient } from "@/lib/supabase"
 
 type FamilyRow = Database["public"]["Tables"]["families"]["Row"]
+type FamilyInviteSecret =
+  Database["public"]["Tables"]["family_invite_secrets"]["Row"]
 type MemberRow = Database["public"]["Tables"]["family_members"]["Row"]
 type GiftRow = Database["public"]["Tables"]["gifts"]["Row"]
+type WishListRow = Database["public"]["Tables"]["wish_lists"]["Row"]
+type ChildRow = Database["public"]["Tables"]["family_children"]["Row"]
 type ClaimRow = Database["public"]["Tables"]["claims"]["Row"]
 type TeamUpRow = Database["public"]["Tables"]["team_ups"]["Row"]
 type TeamUpMemberRow = Database["public"]["Tables"]["team_up_members"]["Row"]
@@ -59,6 +73,8 @@ type FamilyProfile = Pick<
 > & { role: MemberRow["role"]; age_label: string | null }
 type FamilyDetails = {
   gifts: GiftRow[]
+  lists: WishListRow[]
+  children: ChildRow[]
   members: FamilyProfile[]
   invites: InviteRow[]
   claims: ClaimRow[]
@@ -66,34 +82,12 @@ type FamilyDetails = {
   teamUpMembers: TeamUpMemberRow[]
 }
 type DashboardView = "tree" | "family" | "profile" | "list" | "team-ups"
-type PriceFilter = "all" | "under25" | "25to50" | "50to100" | "100plus"
-type GiftForm = {
-  title: string
-  url: string
-  price: string
-  category: GiftCategory
-  notes: string
-}
-
 type FamilyDashboardProps = {
   client: GiftElfSupabaseClient
   user: User
   onSignOut: () => Promise<void>
 }
 
-const categories: { value: GiftCategory; label: string }[] = [
-  { value: "want", label: "Wants" },
-  { value: "need", label: "Needs" },
-  { value: "gift_card", label: "Gift cards" },
-  { value: "nice_to_have", label: "Nice-to-have" },
-]
-const priceFilters: { value: PriceFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "under25", label: "Under $25" },
-  { value: "25to50", label: "$25–50" },
-  { value: "50to100", label: "$50–100" },
-  { value: "100plus", label: "$100+" },
-]
 const appThemes: { value: AppTheme; label: string; color: string }[] = [
   { value: "family", label: "Match family", color: "#2f9e78" },
   { value: "classic", label: "Classic", color: "#c52d3a" },
@@ -102,13 +96,6 @@ const appThemes: { value: AppTheme; label: string; color: string }[] = [
   { value: "amber", label: "Amber", color: "#e5a331" },
   { value: "cyberpunk", label: "Cyberpunk", color: "#7c3aed" },
 ]
-const blankGift: GiftForm = {
-  title: "",
-  url: "",
-  price: "",
-  category: "want",
-  notes: "",
-}
 const appStartedAt = Date.now()
 
 function messageFromError(error: unknown) {
@@ -127,25 +114,6 @@ function normalizeWebUrl(value: string) {
   } catch {
     return null
   }
-}
-
-function storeFromUrl(value: string) {
-  if (!value) return null
-  try {
-    return new URL(value).hostname.replace(/^www\./, "")
-  } catch {
-    return null
-  }
-}
-
-function categoryFromLegacy(category: string): GiftCategory {
-  const normalized = category.toLowerCase()
-  if (normalized.includes("card")) return "gift_card"
-  if (normalized.includes("need") || normalized.includes("health"))
-    return "need"
-  if (normalized.includes("extra") || normalized.includes("nice"))
-    return "nice_to_have"
-  return "want"
 }
 
 async function fetchFamilySummaries(
@@ -183,6 +151,8 @@ async function fetchFamilyDetails(
 ): Promise<FamilyDetails> {
   const [
     giftResult,
+    listResult,
+    childResult,
     memberResult,
     inviteResult,
     claimResult,
@@ -194,6 +164,16 @@ async function fetchFamilyDetails(
       .select("*")
       .eq("family_id", familyId)
       .order("created_at", { ascending: false }),
+    client
+      .from("wish_lists")
+      .select("*")
+      .eq("family_id", familyId)
+      .order("created_at"),
+    client
+      .from("family_children")
+      .select("*")
+      .eq("family_id", familyId)
+      .order("created_at"),
     client
       .from("family_members")
       .select("*")
@@ -210,6 +190,8 @@ async function fetchFamilyDetails(
   ])
   for (const result of [
     giftResult,
+    listResult,
+    childResult,
     memberResult,
     inviteResult,
     claimResult,
@@ -220,6 +202,8 @@ async function fetchFamilyDetails(
   }
   if (
     giftResult.data === null ||
+    listResult.data === null ||
+    childResult.data === null ||
     memberResult.data === null ||
     inviteResult.data === null ||
     claimResult.data === null ||
@@ -269,6 +253,8 @@ async function fetchFamilyDetails(
 
   return {
     gifts: giftResult.data,
+    lists: listResult.data,
+    children: childResult.data,
     members,
     invites: inviteResult.data,
     claims: claimResult.data,
@@ -286,6 +272,8 @@ export function FamilyDashboard({
   const [activeFamilyId, setActiveFamilyId] = useState("")
   const [details, setDetails] = useState<FamilyDetails>({
     gifts: [],
+    lists: [],
+    children: [],
     members: [],
     invites: [],
     claims: [],
@@ -305,14 +293,22 @@ export function FamilyDashboard({
     () => new URLSearchParams(window.location.search).get("join") ?? ""
   )
   const [scanningInvite, setScanningInvite] = useState(false)
+  const [familyAction, setFamilyAction] = useState<"create" | "join" | null>(
+    () =>
+      new URLSearchParams(window.location.search).has("join") ? "join" : null
+  )
+  const [childName, setChildName] = useState("")
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [ownerInvite, setOwnerInvite] = useState<FamilyInviteSecret | null>(
+    null
+  )
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [expiresOn, setExpiresOn] = useState("")
   const [avatarColor, setAvatarColor] = useState(ORNAMENT_COLORS[0])
   const [avatarIcon, setAvatarIcon] = useState<AvatarIcon>("gift")
-  const [editingGiftId, setEditingGiftId] = useState("")
-  const [editTitle, setEditTitle] = useState("")
-  const [giftForm, setGiftForm] = useState<GiftForm>(blankGift)
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const { ownerId } = useParams()
+  const { ownerId, childId } = useParams()
   const view: DashboardView =
     pathname.startsWith("/list") || pathname.startsWith("/profile/list")
       ? "list"
@@ -323,31 +319,79 @@ export function FamilyDashboard({
           : pathname.startsWith("/family")
             ? "family"
             : "tree"
-  const listOwnerId = ownerId ?? user.id
-  const [category, setCategory] = useState<GiftCategory>("want")
-  const [priceFilter, setPriceFilter] = useState<PriceFilter>("all")
+  const selectedChild = details.children.find((child) => child.id === childId)
+  const listOwnerId = childId
+    ? (selectedChild?.parent_id ?? "")
+    : (ownerId ?? user.id)
   const [inviteTargets, setInviteTargets] = useState<Record<string, string>>({})
   const [proofUrls, setProofUrls] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [pendingId, setPendingId] = useState("")
+  const [detailsFamilyId, setDetailsFamilyId] = useState("")
+  const [treeDirection, setTreeDirection] = useState<"left" | "right">("right")
+  const [clock, setClock] = useState(() => Date.now())
+  const accountMenuContainer = useRef<HTMLElement>(null)
+  const activeFamilyRef = useRef(activeFamilyId)
+
+  useEffect(() => {
+    activeFamilyRef.current = activeFamilyId
+  }, [activeFamilyId])
 
   const activeFamily = families.find((family) => family.id === activeFamilyId)
+  const activeFamilyIndex = families.findIndex(
+    (family) => family.id === activeFamilyId
+  )
+  const previousFamily = families[activeFamilyIndex - 1]
+  const nextFamily = families[activeFamilyIndex + 1]
+  const AccountIcon = ORNAMENT_ICONS[avatarIcon]
+  const inviteExpired = ownerInvite
+    ? new Date(ownerInvite.invite_code_expires_at).getTime() <= clock
+    : false
+  const familyYearEnded =
+    activeFamily !== undefined &&
+    new Date(clock).toISOString().slice(0, 10) > `${activeFamily.year}-12-31`
+
+  useEffect(() => {
+    if (!settingsOpen || activeFamily?.role !== "owner") return
+    let active = true
+    const familyId = activeFamily.id
+    async function loadInvite() {
+      try {
+        const { data, error } = await client
+          .from("family_invite_secrets")
+          .select("*")
+          .eq("family_id", familyId)
+          .single()
+        if (error) throw new Error(error.message)
+        if (!active) return
+        setOwnerInvite(data)
+        setExpiresOn(
+          new Date(new Date(data.invite_code_expires_at).getTime() - 1)
+            .toISOString()
+            .slice(0, 10)
+        )
+      } catch (error) {
+        if (active) notifyError(messageFromError(error))
+      } finally {
+        if (active) setInviteLoading(false)
+      }
+    }
+    void loadInvite()
+    return () => {
+      active = false
+    }
+  }, [activeFamily?.id, activeFamily?.role, client, settingsOpen])
+  const visualTheme =
+    view === "tree" || appTheme === "family"
+      ? (activeFamily?.tree_theme ?? "classic")
+      : appTheme
   const canDeleteFamily =
     details.members.length === 1 && details.members[0]?.id === user.id
   const memberById = useMemo(
     () => new Map(details.members.map((member) => [member.id, member])),
     [details.members]
   )
-  const claimsByGift = useMemo(
-    () => new Map(details.claims.map((claim) => [claim.gift_id, claim])),
-    [details.claims]
-  )
-  const teamUpByGift = useMemo(
-    () => new Map(details.teamUps.map((teamUp) => [teamUp.gift_id, teamUp])),
-    [details.teamUps]
-  )
-
   const myTeamUps = details.teamUps.filter((teamUp) =>
     details.teamUpMembers.some(
       (member) => member.team_up_id === teamUp.id && member.user_id === user.id
@@ -361,8 +405,11 @@ export function FamilyDashboard({
     appStartedAt <= new Date(activeFamily?.year ?? 0, 11, 25, 23, 59).getTime()
 
   function clearFamilyDetails() {
+    setDetailsFamilyId("")
     setDetails({
       gifts: [],
+      lists: [],
+      children: [],
       members: [],
       invites: [],
       claims: [],
@@ -383,7 +430,11 @@ export function FamilyDashboard({
 
   const refreshDetails = useCallback(
     async (familyId: string) => {
-      setDetails(await fetchFamilyDetails(client, familyId))
+      const nextDetails = await fetchFamilyDetails(client, familyId)
+      if (activeFamilyRef.current === familyId) {
+        setDetails(nextDetails)
+        setDetailsFamilyId(familyId)
+      }
     },
     [client]
   )
@@ -444,7 +495,10 @@ export function FamilyDashboard({
     let active = true
     fetchFamilyDetails(client, activeFamilyId)
       .then((nextDetails) => {
-        if (active) setDetails(nextDetails)
+        if (active) {
+          setDetails(nextDetails)
+          setDetailsFamilyId(activeFamilyId)
+        }
       })
       .catch((error: unknown) => {
         if (active) notifyError(messageFromError(error))
@@ -490,6 +544,32 @@ export function FamilyDashboard({
           event: "*",
           schema: "public",
           table: "family_invites",
+          filter: `family_id=eq.${activeFamilyId}`,
+        },
+        () =>
+          void refreshDetails(activeFamilyId).catch((error: unknown) =>
+            notifyError(messageFromError(error))
+          )
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "family_children",
+          filter: `family_id=eq.${activeFamilyId}`,
+        },
+        () =>
+          void refreshDetails(activeFamilyId).catch((error: unknown) =>
+            notifyError(messageFromError(error))
+          )
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "wish_lists",
           filter: `family_id=eq.${activeFamilyId}`,
         },
         () =>
@@ -568,8 +648,10 @@ export function FamilyDashboard({
       if (!created) throw new Error("Supabase did not return the new family.")
       await refreshFamilies()
       clearFamilyDetails()
+      activeFamilyRef.current = created.family_id
       setActiveFamilyId(created.family_id)
       setFamilyName("")
+      setFamilyAction(null)
       notifySuccess(`Created ${created.name} (${created.year}).`)
     } catch (error) {
       reportError(error)
@@ -590,8 +672,10 @@ export function FamilyDashboard({
       if (!joined) throw new Error("Supabase did not return the joined family.")
       await refreshFamilies()
       clearFamilyDetails()
+      activeFamilyRef.current = joined.family_id
       setActiveFamilyId(joined.family_id)
       setInviteCode("")
+      setFamilyAction(null)
       notifySuccess(`You joined ${joined.name} (${joined.year}).`)
       window.history.replaceState({}, "", window.location.pathname)
     } catch (error) {
@@ -612,7 +696,7 @@ export function FamilyDashboard({
       return
     if (
       !window.confirm(
-        `Delete ${activeFamily.name} (${activeFamily.year})? This permanently removes its gifts and invitations.`
+        `Delete ${activeFamily.name} (${activeFamily.year})? This permanently removes its children, lists, gifts, and invitations.`
       )
     )
       return
@@ -622,6 +706,8 @@ export function FamilyDashboard({
         p_family_id: activeFamily.id,
       })
       if (error) throw new Error(error.message)
+      setSettingsOpen(false)
+      setOwnerInvite(null)
       clearFamilyDetails()
       setFamilies((current) =>
         current.filter((family) => family.id !== activeFamily.id)
@@ -650,12 +736,10 @@ export function FamilyDashboard({
         p_family_id: activeFamily.id,
       })
       if (error) throw new Error(error.message)
-      setFamilies((current) =>
-        current.map((family) =>
-          family.id === activeFamily.id
-            ? { ...family, invite_code: data }
-            : family
-        )
+      setOwnerInvite((current) =>
+        current?.family_id === activeFamily.id
+          ? { ...current, invite_code: data }
+          : current
       )
       notifySuccess(
         "A new family invite is ready. The old invite no longer works."
@@ -751,32 +835,14 @@ export function FamilyDashboard({
     }
   }
 
-  async function renameGift(giftId: string) {
-    const title = editTitle.trim()
-    if (!title || !activeFamily) {
-      setEditingGiftId("")
-      return
-    }
-    setPendingId(giftId)
-    try {
-      const { error } = await client
-        .from("gifts")
-        .update({ title })
-        .eq("id", giftId)
-        .eq("owner_id", user.id)
-      if (error) throw new Error(error.message)
-      setEditingGiftId("")
-      await refreshDetails(activeFamily.id)
-    } catch (error) {
-      reportError(error)
-    } finally {
-      setPendingId("")
-    }
-  }
-
   async function copyInviteLink() {
-    if (!activeFamily) return
-    const link = `${window.location.origin}/?join=${encodeURIComponent(activeFamily.invite_code)}`
+    if (
+      !activeFamily ||
+      activeFamily.role !== "owner" ||
+      ownerInvite?.family_id !== activeFamily.id
+    )
+      return
+    const link = `${window.location.origin}/?join=${encodeURIComponent(ownerInvite.invite_code)}`
     try {
       await navigator.clipboard.writeText(link)
       notifySuccess("Family invite link copied.")
@@ -785,42 +851,27 @@ export function FamilyDashboard({
     }
   }
 
-  async function addGift(event: FormEvent<HTMLFormElement>) {
+  async function saveInviteExpiration(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!activeFamily) return
-    const url = normalizeWebUrl(giftForm.url)
-    if (giftForm.url.trim() && !url) {
-      reportError(new Error("Gift links must start with http:// or https://."))
+    if (
+      !activeFamily ||
+      activeFamily.role !== "owner" ||
+      ownerInvite?.family_id !== activeFamily.id
+    )
       return
-    }
-    const price = giftForm.price.trim() ? Number(giftForm.price) : null
-    if (price !== null && (!Number.isFinite(price) || price < 0)) {
-      reportError(new Error("Enter a valid non-negative price."))
-      return
-    }
     setIsSubmitting(true)
     try {
-      const preview = url
-        ? await fetchLinkPreview(client, url)
-        : { title: null, image: null }
-      const title =
-        giftForm.title.trim() || preview.title || storeFromUrl(url ?? "") || ""
-      if (!title) throw new Error("Add a name or a product link.")
-      const { error } = await client.from("gifts").insert({
-        family_id: activeFamily.id,
-        owner_id: user.id,
-        title,
-        image_url: preview.image,
-        url,
-        store: storeFromUrl(url ?? ""),
-        price,
-        category: giftForm.category,
-        notes: giftForm.notes.trim() || null,
+      const { data, error } = await client.rpc("set_family_invite_expiry", {
+        p_family_id: activeFamily.id,
+        p_expires_on: expiresOn,
       })
       if (error) throw new Error(error.message)
-      setGiftForm(blankGift)
-      notifySuccess("Added to your wish list.")
-      await refreshDetails(activeFamily.id)
+      setOwnerInvite((current) =>
+        current?.family_id === activeFamily.id
+          ? { ...current, invite_code_expires_at: data }
+          : current
+      )
+      notifySuccess("Invite expiration updated.")
     } catch (error) {
       reportError(error)
     } finally {
@@ -828,43 +879,55 @@ export function FamilyDashboard({
     }
   }
 
-  async function importOriginalList() {
+  async function addChild(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
     if (!activeFamily) return
+    const name = childName.trim()
+    if (!name) {
+      notifyError("Enter your child's name.")
+      return
+    }
     setIsSubmitting(true)
     try {
-      const { data: existing, error: existingError } = await client
-        .from("gifts")
-        .select("title")
-        .eq("family_id", activeFamily.id)
-        .eq("owner_id", user.id)
-      if (existingError) throw new Error(existingError.message)
-      const existingTitles = new Set(existing.map((gift) => gift.title))
-      const giftsToAdd = originalWishList
-        .filter((gift) => !existingTitles.has(gift.title))
-        .map((gift) => ({
-          family_id: activeFamily.id,
-          owner_id: user.id,
-          title: gift.title,
-          url: normalizeWebUrl(gift.link),
-          store: storeFromUrl(gift.link),
-          price: Number(gift.price.replace(/[^0-9.]/g, "")) || null,
-          category: categoryFromLegacy(gift.category),
-          image_url: gift.image,
-        }))
-      if (giftsToAdd.length === 0) {
-        notifyInfo("Your original list is already imported.")
-        return
-      }
-      const { error } = await client.from("gifts").insert(giftsToAdd)
+      const { error } = await client.from("family_children").insert({
+        family_id: activeFamily.id,
+        parent_id: user.id,
+        display_name: name,
+      })
       if (error) throw new Error(error.message)
-      notifySuccess(
-        `Imported ${giftsToAdd.length} gifts from your original list.`
-      )
+      setChildName("")
       await refreshDetails(activeFamily.id)
+      notifySuccess(`${name} was added to this family.`)
     } catch (error) {
       reportError(error)
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  async function removeChild(child: ChildRow) {
+    if (!activeFamily || child.parent_id !== user.id) return
+    if (
+      !window.confirm(
+        `Remove ${child.display_name} from this family? Their lists, gifts, claims, and team-ups will be permanently deleted.`
+      )
+    )
+      return
+    setPendingId(child.id)
+    try {
+      const { error } = await client
+        .from("family_children")
+        .delete()
+        .eq("id", child.id)
+        .eq("family_id", activeFamily.id)
+        .eq("parent_id", user.id)
+      if (error) throw new Error(error.message)
+      await refreshDetails(activeFamily.id)
+      notifySuccess(`${child.display_name} was removed from this family.`)
+    } catch (error) {
+      reportError(error)
+    } finally {
+      setPendingId("")
     }
   }
 
@@ -893,25 +956,6 @@ export function FamilyDashboard({
       if (error) throw new Error(error.message)
       notifySuccess("Your claim was removed.")
       if (activeFamilyId) await refreshDetails(activeFamilyId)
-    } catch (error) {
-      reportError(error)
-    } finally {
-      setPendingId("")
-    }
-  }
-
-  async function deleteGift(giftId: string) {
-    if (!activeFamily) return
-    setPendingId(giftId)
-    try {
-      const { error } = await client
-        .from("gifts")
-        .delete()
-        .eq("id", giftId)
-        .eq("owner_id", user.id)
-      if (error) throw new Error(error.message)
-      notifySuccess("Gift removed from your list.")
-      await refreshDetails(activeFamily.id)
     } catch (error) {
       reportError(error)
     } finally {
@@ -1008,22 +1052,64 @@ export function FamilyDashboard({
   }
 
   const selectedMember = memberById.get(listOwnerId)
-  const visibleGifts = details.gifts.filter((gift) => {
-    if (gift.owner_id !== listOwnerId || gift.category !== category)
-      return false
-    if (priceFilter === "all" || gift.price === null)
-      return priceFilter === "all"
-    if (priceFilter === "under25") return gift.price < 25
-    if (priceFilter === "25to50") return gift.price >= 25 && gift.price < 50
-    if (priceFilter === "50to100") return gift.price >= 50 && gift.price < 100
-    return gift.price >= 100
-  })
-
   function openList(ownerId: string) {
-    navigate(ownerId === user.id ? "/list" : `/list/${ownerId}`)
-    setCategory("want")
-    setPriceFilter("all")
+    if (details.children.some((child) => child.id === ownerId)) {
+      navigate(`/list/child/${ownerId}`)
+    } else {
+      navigate(ownerId === user.id ? "/list" : `/list/${ownerId}`)
+    }
   }
+
+  const treeMembers = details.members.flatMap((member) => [
+    member,
+    ...details.children
+      .filter((child) => child.parent_id === member.id)
+      .map((child) => ({
+        id: child.id,
+        display_name: child.display_name,
+        avatar_color: member.avatar_color,
+        avatar_icon: member.avatar_icon,
+        parentName: member.display_name,
+      })),
+  ])
+  function selectFamily(id: string) {
+    if (id === activeFamilyId) return
+    const previousIndex = families.findIndex(
+      (family) => family.id === activeFamilyId
+    )
+    const nextIndex = families.findIndex((family) => family.id === id)
+    setTreeDirection(nextIndex > previousIndex ? "right" : "left")
+    activeFamilyRef.current = id
+    setSettingsOpen(false)
+    setOwnerInvite(null)
+    clearFamilyDetails()
+    setChildName("")
+    setActiveFamilyId(id)
+  }
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const today = new Date(clock)
+  const todayStart = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  )
+  const christmasYear =
+    today.getMonth() === 11 && today.getDate() > 25
+      ? today.getFullYear() + 1
+      : today.getFullYear()
+  const daysUntilChristmas = Math.round(
+    (Date.UTC(christmasYear, 11, 25) -
+      Date.UTC(
+        todayStart.getFullYear(),
+        todayStart.getMonth(),
+        todayStart.getDate()
+      )) /
+      86_400_000
+  )
 
   const navClass = (selected: boolean) =>
     `app-nav-link rounded-full px-4 py-2 text-sm font-semibold ${selected ? "is-active" : ""}`
@@ -1032,8 +1118,7 @@ export function FamilyDashboard({
     const root = document.documentElement
     const meta = document.querySelector('meta[name="theme-color"]')
     const previousMetaColor = meta?.getAttribute("content")
-    root.dataset.appTheme =
-      appTheme === "family" ? (activeFamily?.tree_theme ?? "classic") : appTheme
+    root.dataset.appTheme = visualTheme
     const bg = getComputedStyle(
       document.querySelector(".app-background") ?? root
     ).getPropertyValue("--app-via")
@@ -1045,325 +1130,679 @@ export function FamilyDashboard({
         else meta.setAttribute("content", previousMetaColor)
       }
     }
-  }, [activeFamily?.tree_theme, appTheme])
+  }, [visualTheme])
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-3 rounded-xl bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <div>
-            <p className="text-sm font-semibold text-lighter-black">
-              {user.email}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Your family gift space
-            </p>
-          </div>
-          {families.length > 0 && (
-            <label className="text-sm font-medium text-lighter-black">
-              <span className="sr-only">Active family</span>
-              <select
-                className="h-10 rounded-lg border border-border bg-white px-3"
-                onChange={(event) => {
-                  clearFamilyDetails()
-                  setActiveFamilyId(event.target.value)
-                }}
-                value={activeFamilyId}
-              >
-                {families.map((family) => (
-                  <option key={family.id} value={family.id}>
-                    {family.name} · {family.year}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <Button
-            className="rounded-lg"
-            onClick={() => navigate("/profile")}
-            variant="outline"
-          >
-            Profile
-          </Button>
-          <Button
-            className="rounded-lg"
-            onClick={() => void onSignOut()}
-            variant="outline"
-          >
-            Sign out
-          </Button>
-        </div>
-      </header>
-
-      <nav
-        aria-label="Gift Elf sections"
-        className="app-nav flex flex-wrap gap-2"
+      <header
+        className="relative flex items-center gap-3"
+        ref={accountMenuContainer}
       >
-        <NavLink className={({ isActive }) => navClass(isActive)} to="/tree">
-          Tree
-        </NavLink>
-        <NavLink className={({ isActive }) => navClass(isActive)} to="/family">
-          Family
-        </NavLink>
-        <NavLink
-          className={() =>
-            navClass(
-              view === "profile" || (view === "list" && listOwnerId === user.id)
-            )
-          }
-          to="/profile"
+        <Menu.Root>
+          <Menu.Trigger
+            aria-label="Account menu"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full border-2 border-border shadow-sm transition hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            style={{ backgroundColor: avatarColor }}
+          >
+            <AccountIcon aria-hidden="true" className="size-5 text-[#171717]" />
+          </Menu.Trigger>
+          <Menu.Portal className="absolute" container={accountMenuContainer}>
+            <Menu.Positioner align="start" className="z-50" sideOffset={8}>
+              <Menu.Popup className="min-w-52 rounded-xl border border-border bg-background p-2 text-foreground shadow-xl outline-none">
+                <p className="max-w-60 truncate px-3 py-2 text-xs text-muted-foreground">
+                  {displayName || user.email}
+                </p>
+                <Menu.Item
+                  className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium outline-none data-highlighted:bg-muted"
+                  onClick={() => navigate("/profile")}
+                >
+                  Profile settings
+                </Menu.Item>
+                <Menu.Item
+                  className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium outline-none data-highlighted:bg-muted"
+                  onClick={() => {
+                    navigate("/profile/list")
+                  }}
+                >
+                  My list
+                </Menu.Item>
+                <Menu.Item
+                  className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium outline-none data-highlighted:bg-muted"
+                  onClick={() => void onSignOut()}
+                >
+                  Sign out
+                </Menu.Item>
+              </Menu.Popup>
+            </Menu.Positioner>
+          </Menu.Portal>
+        </Menu.Root>
+
+        <nav
+          aria-label="Gift Elf sections"
+          className="app-nav flex flex-wrap gap-2"
         >
-          Profile
-        </NavLink>
-        {showTeamUpsTab && (
+          <NavLink className={({ isActive }) => navClass(isActive)} to="/tree">
+            Tree
+          </NavLink>
           <NavLink
             className={({ isActive }) => navClass(isActive)}
-            to="/team-ups"
+            to="/family"
           >
-            Team-ups
+            Family
           </NavLink>
-        )}
-      </nav>
+          {showTeamUpsTab && (
+            <NavLink
+              className={({ isActive }) => navClass(isActive)}
+              to="/team-ups"
+            >
+              Team-ups
+            </NavLink>
+          )}
+        </nav>
+      </header>
+
+      {view !== "tree" && families.length > 0 && (
+        <label className="inline-flex items-center gap-2 text-sm font-semibold">
+          Family
+          <select
+            aria-label="Active family"
+            className="h-10 max-w-60 rounded-lg border border-border bg-white px-3"
+            onChange={(event) => selectFamily(event.target.value)}
+            value={activeFamilyId}
+          >
+            {families.map((family) => (
+              <option key={family.id} value={family.id}>
+                {family.name} · {family.year}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {view === "tree" && (
-        <section className="page-transition px-1 py-2 sm:p-5">
-          <h2 className="text-center text-2xl font-bold">
-            {activeFamily ? activeFamily.name : "Your family tree"}
-          </h2>
-          {details.members.length > 0 ? (
-            <>
-              <p className="mb-4 text-center text-sm">
-                Pick an ornament to see that person&rsquo;s wish list.
-              </p>
-              <FamilyTree
-                currentUserId={user.id}
-                members={details.members}
-                theme={activeFamily?.tree_theme}
-                onSelect={openList}
-              />
-            </>
-          ) : (
-            <p className="py-8 text-center text-sm">
-              {isLoading
-                ? "Decorating the tree..."
-                : "Create or join a family to hang your ornaments."}{" "}
-              {!isLoading && (
-                <NavLink className="font-bold underline" to="/family">
-                  Go to Family
-                </NavLink>
-              )}
+        <section className="h-fullpage-transition">
+          <div className="min-w-0 overflow-hidden px-1 py-2 sm:p-5">
+            <h2 className="text-center text-2xl font-bold">
+              {activeFamily ? activeFamily.name : "Your family tree"}
+            </h2>
+            <p
+              className="mt-1 text-center text-sm font-semibold"
+              aria-live="polite"
+            >
+              {daysUntilChristmas === 0
+                ? "Merry Christmas!"
+                : `${daysUntilChristmas} days until Christmas`}
             </p>
-          )}
+            {detailsFamilyId === activeFamilyId &&
+            details.members.length > 0 ? (
+              <div
+                className={`tree-slide tree-slide--${treeDirection}`}
+                key={activeFamilyId}
+              >
+                <p className="mb-4 text-center text-sm">
+                  Pick an ornament to see that person&rsquo;s wish list.
+                </p>
+                <div className="tree-scene relative mx-auto max-w-4xl">
+                  {previousFamily && (
+                    <div
+                      aria-hidden="true"
+                      className="tree-neighbor tree-neighbor--left"
+                    >
+                      <FamilyTree
+                        currentUserId={user.id}
+                        members={[]}
+                        theme={previousFamily.tree_theme}
+                        onSelect={openList}
+                      />
+                    </div>
+                  )}
+                  {nextFamily && (
+                    <div
+                      aria-hidden="true"
+                      className="tree-neighbor tree-neighbor--right"
+                    >
+                      <FamilyTree
+                        currentUserId={user.id}
+                        members={[]}
+                        theme={nextFamily.tree_theme}
+                        onSelect={openList}
+                      />
+                    </div>
+                  )}
+                  <div className="relative z-10">
+                    <FamilyTree
+                      currentUserId={user.id}
+                      members={treeMembers}
+                      theme={activeFamily?.tree_theme ?? "classic"}
+                      onSelect={openList}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="py-8 text-center text-sm">
+                {isLoading ||
+                (activeFamilyId && detailsFamilyId !== activeFamilyId)
+                  ? "Decorating the tree..."
+                  : "Create or join a family to hang your ornaments."}{" "}
+                {!isLoading && !activeFamilyId && (
+                  <NavLink className="font-bold underline" to="/family">
+                    Go to Family
+                  </NavLink>
+                )}
+              </p>
+            )}
+            {families.length > 1 && (
+              <nav
+                aria-label="Choose family tree"
+                className="mt-4 flex flex-wrap items-center justify-center gap-2"
+              >
+                <button
+                  aria-label="Previous tree"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full bg-background text-foreground shadow-sm transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40"
+                  disabled={!previousFamily}
+                  onClick={() =>
+                    previousFamily && selectFamily(previousFamily.id)
+                  }
+                  type="button"
+                >
+                  <ChevronLeft aria-hidden="true" className="size-5" />
+                </button>
+                <div className="flex max-w-full flex-wrap justify-center gap-1">
+                  {families.map((family) => (
+                    <button
+                      aria-current={
+                        family.id === activeFamilyId ? "true" : undefined
+                      }
+                      aria-label={`${family.name} (${family.year})`}
+                      className="flex size-11 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      key={family.id}
+                      onClick={() => selectFamily(family.id)}
+                      title={`${family.name} · ${family.year}`}
+                      type="button"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`size-5 rounded-full border-2 border-background shadow-sm ${family.id === activeFamilyId ? "ring-2 ring-foreground ring-offset-2 ring-offset-background" : ""}`}
+                        style={{
+                          backgroundColor:
+                            TREE_THEMES[family.tree_theme].tiers[2],
+                        }}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <button
+                  aria-label="Next tree"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full bg-background text-foreground shadow-sm transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40"
+                  disabled={!nextFamily}
+                  onClick={() => nextFamily && selectFamily(nextFamily.id)}
+                  type="button"
+                >
+                  <ChevronRight aria-hidden="true" className="size-5" />
+                </button>
+              </nav>
+            )}
+          </div>
         </section>
       )}
 
       {view === "family" && (
         <>
-          <div className="page-transition grid gap-5 lg:grid-cols-2">
-            <form
-              className="space-y-3 rounded-2xl bg-white p-5 shadow-lg"
-              onSubmit={createFamily}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => {
+                setScanningInvite(false)
+                setFamilyAction((current) => (current ? null : "create"))
+              }}
+              type="button"
+              variant="outline"
             >
-              <h2 className="text-xl font-bold text-lighter-black">
-                Create a family for a year
-              </h2>
-              <div className="grid gap-3 sm:grid-cols-[1fr_8rem]">
-                <Input
-                  aria-label="Family name"
-                  className="h-11 rounded-lg px-3"
-                  maxLength={100}
-                  onChange={(event) => setFamilyName(event.target.value)}
-                  placeholder="The North Pole crew"
-                  required
-                  value={familyName}
-                />
-                <Input
-                  aria-label="Family year"
-                  className="h-11 rounded-lg px-3"
-                  max={9998}
-                  min={2000}
-                  onChange={(event) => setFamilyYear(event.target.value)}
-                  required
-                  type="number"
-                  value={familyYear}
-                />
-              </div>
-              <Button
-                className="rounded-lg bg-accent-red text-white hover:bg-[#a81e2d]"
-                disabled={isSubmitting}
-                type="submit"
-              >
-                <Plus aria-hidden="true" className="mr-2 size-4" />
-                Create family
-              </Button>
-            </form>
-
-            <form
-              className="space-y-3 rounded-2xl bg-white p-5 shadow-lg"
-              onSubmit={joinFamily}
-            >
-              <h2 className="text-xl font-bold text-lighter-black">
-                Join a family
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Type a family invite code or scan its QR code.
-              </p>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  aria-label="Family invite code"
-                  autoCapitalize="characters"
-                  className="h-11 rounded-lg px-3 uppercase"
-                  onChange={(event) =>
-                    setInviteCode(event.target.value.toUpperCase())
-                  }
-                  placeholder="Type or paste family code"
-                  required
-                  value={inviteCode}
-                />
+              {familyAction ? "Close" : "Create or Join"}
+            </Button>
+            {familyAction && (
+              <>
                 <Button
-                  className="h-11 rounded-lg bg-lighter-black text-white hover:bg-black"
-                  disabled={isSubmitting}
-                  type="submit"
+                  aria-pressed={familyAction === "create"}
+                  onClick={() => {
+                    setScanningInvite(false)
+                    setFamilyAction("create")
+                  }}
+                  type="button"
+                  variant={familyAction === "create" ? "default" : "outline"}
                 >
-                  Join family
+                  Create
                 </Button>
-              </div>
-              <Button
-                className="gap-2 rounded-lg"
-                onClick={() => setScanningInvite((current) => !current)}
-                type="button"
-                variant="outline"
-              >
-                <Camera aria-hidden="true" className="size-4" />
-                {scanningInvite ? "Close camera" : "Scan invite QR code"}
-              </Button>
-              {scanningInvite && (
-                <InviteScanner
-                  onClose={() => setScanningInvite(false)}
-                  onScan={handleScannedInvite}
-                />
-              )}
-            </form>
+                <Button
+                  aria-pressed={familyAction === "join"}
+                  onClick={() => setFamilyAction("join")}
+                  type="button"
+                  variant={familyAction === "join" ? "default" : "outline"}
+                >
+                  Join
+                </Button>
+              </>
+            )}
           </div>
-
-          {isLoading ? (
-            <p className="page-transition rounded-xl bg-white p-6 text-sm text-muted-foreground">
-              Loading your families…
-            </p>
-          ) : activeFamily ? (
-            <section className="page-transition space-y-5 rounded-2xl bg-white p-5 shadow-lg sm:p-8">
-              <div className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-center sm:justify-between">
+          {activeFamily && (
+            <section className="page-transition space-y-3 rounded-2xl bg-white p-5 shadow-lg">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-mono text-xs tracking-[0.18em] text-accent-red uppercase">
-                    {activeFamily.year} · {details.members.length} joined
+                  <p className="text-xs font-semibold tracking-wider text-accent-red uppercase">
+                    {activeFamily.year} ·{" "}
+                    {details.members.length + details.children.length} members
                   </p>
                   <h2 className="text-2xl font-bold text-lighter-black">
                     {activeFamily.name}
                   </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Christmas is in{" "}
-                    {Math.max(
-                      0,
-                      Math.ceil(
-                        (new Date(activeFamily.year, 11, 25).getTime() -
-                          appStartedAt) /
-                          (1000 * 60 * 60 * 24)
-                      )
-                    )}{" "}
-                    days
-                  </p>
                 </div>
-                <div className="flex flex-col items-center gap-2 rounded-xl border border-border p-3">
-                  <QRCodeSVG
-                    aria-label="Family invite QR code"
-                    size={112}
-                    value={`${window.location.origin}/?join=${encodeURIComponent(activeFamily.invite_code)}`}
-                  />
-                  <span className="max-w-40 text-center font-mono text-xs font-semibold break-all">
-                    {activeFamily.invite_code.match(/.{1,4}/g)?.join(" ")}
-                  </span>
-                  <Button
-                    className="gap-2 rounded-lg"
-                    onClick={() => void copyInviteLink()}
-                    size="sm"
-                    variant="outline"
+                {activeFamily.role === "owner" && (
+                  <Sheet
+                    open={settingsOpen}
+                    onOpenChange={(open) => {
+                      setSettingsOpen(open)
+                      setOwnerInvite(null)
+                      setInviteLoading(open)
+                    }}
                   >
-                    <Copy aria-hidden="true" className="size-4" />
-                    Copy invite link
-                  </Button>
-                  {activeFamily.role === "owner" && (
-                    <Button
-                      className="gap-2 rounded-lg"
-                      disabled={isSubmitting}
-                      onClick={() => void regenerateInvite()}
-                      size="sm"
-                      variant="outline"
+                    <SheetTrigger
+                      render={
+                        <Button
+                          aria-label="Family settings"
+                          size="icon"
+                          type="button"
+                          variant="outline"
+                        />
+                      }
                     >
-                      <RefreshCw aria-hidden="true" className="size-4" />
-                      New invite
-                    </Button>
-                  )}
-                  <span className="max-w-40 text-center text-xs text-muted-foreground">
-                    Expires{" "}
-                    {new Date(
-                      activeFamily.invite_code_expires_at
-                    ).toLocaleDateString()}
-                  </span>
-                </div>
+                      <MoreHorizontal aria-hidden="true" />
+                    </SheetTrigger>
+                    <SheetContent
+                      container={accountMenuContainer}
+                      className="w-full max-w-[min(100vw,26rem)] overflow-y-auto bg-background text-sm text-foreground"
+                      side="right"
+                    >
+                      <SheetHeader>
+                        <SheetTitle className="text-lg font-bold">
+                          {activeFamily.name} settings
+                        </SheetTitle>
+                        <SheetDescription>
+                          Manage this family&apos;s invitation and tree.
+                        </SheetDescription>
+                      </SheetHeader>
+                      <div className="space-y-5 px-4 pb-6">
+                        <section className="space-y-3">
+                          <h3 className="text-sm font-bold">Family invite</h3>
+                          {inviteLoading ? (
+                            <p className="text-sm text-muted-foreground">
+                              Loading invite…
+                            </p>
+                          ) : ownerInvite?.family_id === activeFamily.id ? (
+                            <>
+                              <QRCodeSVG
+                                aria-label="Family invite QR code"
+                                marginSize={4}
+                                size={160}
+                                value={`${window.location.origin}/?join=${encodeURIComponent(ownerInvite.invite_code)}`}
+                              />
+                              <p className="font-mono text-xs font-semibold break-all">
+                                {ownerInvite.invite_code
+                                  .match(/.{1,4}/g)
+                                  ?.join(" ")}
+                              </p>
+                              {inviteExpired && (
+                                <p
+                                  className="text-sm text-muted-foreground"
+                                  role="status"
+                                >
+                                  {familyYearEnded
+                                    ? "This family year has ended. Create a new family for a new invite."
+                                    : "This invite has expired. Update its expiration before sharing or regenerating it."}
+                                </p>
+                              )}
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  className="gap-2 text-sm"
+                                  disabled={inviteExpired}
+                                  onClick={() => void copyInviteLink()}
+                                  size="sm"
+                                  type="button"
+                                  variant="outline"
+                                >
+                                  <Copy aria-hidden="true" /> Copy invite link
+                                </Button>
+                                <Button
+                                  className="gap-2 text-sm"
+                                  disabled={isSubmitting || inviteExpired}
+                                  onClick={() => void regenerateInvite()}
+                                  size="sm"
+                                  type="button"
+                                  variant="outline"
+                                >
+                                  <RefreshCw aria-hidden="true" /> New invite
+                                </Button>
+                              </div>
+                              <form
+                                className="space-y-2"
+                                onSubmit={(event) =>
+                                  void saveInviteExpiration(event)
+                                }
+                              >
+                                <label
+                                  className="block text-sm font-medium"
+                                  htmlFor="invite-expiry"
+                                >
+                                  Valid through (UTC)
+                                </label>
+                                <div className="flex flex-wrap gap-2">
+                                  <Input
+                                    disabled={familyYearEnded}
+                                    id="invite-expiry"
+                                    className="w-auto"
+                                    min={new Date(clock)
+                                      .toISOString()
+                                      .slice(0, 10)}
+                                    max={`${activeFamily.year}-12-31`}
+                                    onChange={(event) =>
+                                      setExpiresOn(event.target.value)
+                                    }
+                                    required
+                                    type="date"
+                                    value={expiresOn}
+                                  />
+                                  <Button
+                                    className="text-sm"
+                                    disabled={
+                                      isSubmitting ||
+                                      !expiresOn ||
+                                      familyYearEnded
+                                    }
+                                    size="sm"
+                                    type="submit"
+                                    variant="outline"
+                                  >
+                                    Save expiration
+                                  </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  The invite expires at the end of this UTC
+                                  date, no later than the end of{" "}
+                                  {activeFamily.year}.
+                                </p>
+                              </form>
+                            </>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              Invite details could not be loaded. Close and
+                              reopen settings to retry.
+                            </p>
+                          )}
+                        </section>
+                        <section className="space-y-2 border-t border-border pt-4">
+                          <h3 className="text-sm font-bold">Tree theme</h3>
+                          <div className="flex flex-wrap gap-2">
+                            {(Object.keys(TREE_THEMES) as TreeTheme[]).map(
+                              (key) => (
+                                <button
+                                  aria-pressed={activeFamily.tree_theme === key}
+                                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold ${activeFamily.tree_theme === key ? "border-accent-red ring-2 ring-accent-red/30" : "border-border"}`}
+                                  key={key}
+                                  onClick={() => void updateTreeTheme(key)}
+                                  type="button"
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    className="size-4 rounded-full border"
+                                    style={{
+                                      backgroundColor:
+                                        TREE_THEMES[key].tiers[1],
+                                    }}
+                                  />
+                                  {TREE_THEMES[key].label}
+                                </button>
+                              )
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            This tree theme is shared with every family member.
+                          </p>
+                        </section>
+                        <section className="space-y-2 border-t border-border pt-4">
+                          <Button
+                            disabled={isSubmitting || !canDeleteFamily}
+                            onClick={() => void deleteFamily()}
+                            type="button"
+                            variant="destructive"
+                          >
+                            <Trash2 aria-hidden="true" /> Delete family tree
+                          </Button>
+                          <p className="text-xs text-muted-foreground">
+                            You can delete the family only when no other members
+                            have joined.
+                          </p>
+                        </section>
+                      </div>
+                    </SheetContent>
+                  </Sheet>
+                )}
               </div>
-
-              {activeFamily.role === "owner" && (
-                <div className="space-y-2 border-t border-border pt-5">
-                  <Button
-                    className="gap-2 rounded-lg"
-                    disabled={isSubmitting || !canDeleteFamily}
-                    onClick={() => void deleteFamily()}
-                    type="button"
-                    variant="destructive"
-                  >
-                    <Trash2 aria-hidden="true" className="size-4" />
-                    Delete family tree
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Only the owner can delete a family, and only when no other
-                    members have joined.
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-2 border-t border-border pt-5">
-                <h3 className="font-semibold text-lighter-black">Tree theme</h3>
-                <div className="flex flex-wrap gap-2">
-                  {(Object.keys(TREE_THEMES) as TreeTheme[]).map((key) => (
-                    <button
-                      aria-pressed={activeFamily.tree_theme === key}
-                      className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-60 ${activeFamily.tree_theme === key ? "border-accent-red ring-2 ring-accent-red/30" : "border-border"}`}
-                      disabled={activeFamily.role !== "owner"}
-                      key={key}
-                      onClick={() => void updateTreeTheme(key)}
-                      type="button"
-                    >
-                      <span
-                        className="size-4 rounded-full border"
-                        style={{ backgroundColor: TREE_THEMES[key].tiers[1] }}
-                      />
-                      {TREE_THEMES[key].label}
-                    </button>
-                  ))}
-                </div>
-                {activeFamily.role !== "owner" && (
-                  <p className="text-xs text-muted-foreground">
-                    Only the family creator can change the tree theme.
+              <div
+                aria-label="Family members"
+                className="flex flex-wrap items-start gap-4 pt-2"
+              >
+                {details.members.map((member) => {
+                  const Icon =
+                    ORNAMENT_ICONS[member.avatar_icon] ?? ORNAMENT_ICONS.gift
+                  return (
+                    <div className="contents" key={member.id}>
+                      <button
+                        aria-label={`${member.display_name}'s wish lists`}
+                        className="flex w-20 flex-col items-center gap-1 text-center text-sm font-medium text-lighter-black hover:underline"
+                        onClick={() => openList(member.id)}
+                        type="button"
+                      >
+                        <Avatar className="size-14" size="lg">
+                          <AvatarFallback
+                            style={{ backgroundColor: member.avatar_color }}
+                          >
+                            <Icon
+                              aria-hidden="true"
+                              className="size-6 text-[#171717]"
+                            />
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="w-full wrap-break-words">
+                          {member.display_name}
+                        </span>
+                        {member.role === "owner" && (
+                          <span className="text-xs text-muted-foreground">
+                            Owner
+                          </span>
+                        )}
+                      </button>
+                      {details.children
+                        .filter((child) => child.parent_id === member.id)
+                        .map((child) => (
+                          <div
+                            className="flex w-20 flex-col items-center text-center"
+                            key={child.id}
+                          >
+                            <button
+                              aria-label={`${child.display_name}'s wish lists, child of ${member.display_name}`}
+                              className="flex w-full flex-col items-center gap-1 text-sm font-medium text-lighter-black hover:underline"
+                              onClick={() => openList(child.id)}
+                              type="button"
+                            >
+                              <Avatar className="size-14" size="lg">
+                                <AvatarFallback
+                                  style={{
+                                    backgroundColor: member.avatar_color,
+                                  }}
+                                >
+                                  <Icon
+                                    aria-hidden="true"
+                                    className="size-6 text-[#171717]"
+                                  />
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="w-full wrap-break-words">
+                                {child.display_name}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                Child of {member.display_name}
+                              </span>
+                            </button>
+                            {member.id === user.id && (
+                              <button
+                                aria-label={`Remove ${child.display_name}`}
+                                className="mt-1 text-xs text-muted-foreground underline"
+                                disabled={pendingId === child.id}
+                                onClick={() => void removeChild(child)}
+                                type="button"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  )
+                })}
+                {detailsFamilyId !== activeFamily.id && (
+                  <p className="text-sm text-muted-foreground">
+                    Loading members…
                   </p>
                 )}
               </div>
+              <details className="border-t border-border pt-3">
+                <summary className="cursor-pointer text-sm font-semibold text-lighter-black">
+                  Add my child
+                </summary>
+                <form
+                  className="mt-4 flex flex-wrap gap-2"
+                  onSubmit={(event) => void addChild(event)}
+                >
+                  <Input
+                    aria-label="Child's name"
+                    className="max-w-xs rounded-lg"
+                    maxLength={80}
+                    onChange={(event) => setChildName(event.target.value)}
+                    placeholder="Child's name"
+                    value={childName}
+                  />
+                  <Button
+                    disabled={isSubmitting}
+                    type="submit"
+                    variant="outline"
+                  >
+                    <Plus aria-hidden="true" /> Add my child
+                  </Button>
+                </form>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Children are visible only in this family. You manage their
+                  lists.
+                </p>
+              </details>
             </section>
-          ) : (
+          )}
+          {familyAction && (
+            <div className="page-transition">
+              {familyAction === "create" && (
+                <form
+                  className="space-y-3 rounded-2xl bg-white p-5 shadow-lg"
+                  onSubmit={createFamily}
+                >
+                  <h2 className="text-xl font-bold text-lighter-black">
+                    Create a family for a year
+                  </h2>
+                  <div className="grid gap-3 sm:grid-cols-[1fr_8rem]">
+                    <Input
+                      aria-label="Family name"
+                      className="h-11 rounded-lg px-3"
+                      maxLength={100}
+                      onChange={(event) => setFamilyName(event.target.value)}
+                      placeholder="The North Pole crew"
+                      required
+                      value={familyName}
+                    />
+                    <Input
+                      aria-label="Family year"
+                      className="h-11 rounded-lg px-3"
+                      max={9998}
+                      min={2000}
+                      onChange={(event) => setFamilyYear(event.target.value)}
+                      required
+                      type="number"
+                      value={familyYear}
+                    />
+                  </div>
+                  <Button
+                    className="rounded-lg bg-primary text-primary-foreground hover:bg-primary/80"
+                    disabled={isSubmitting}
+                    type="submit"
+                  >
+                    <Plus aria-hidden="true" className="mr-2 size-4" />
+                    Create family
+                  </Button>
+                </form>
+              )}
+
+              {familyAction === "join" && (
+                <form
+                  className="space-y-3 rounded-2xl bg-white p-5 shadow-lg"
+                  onSubmit={joinFamily}
+                >
+                  <h2 className="text-xl font-bold text-lighter-black">
+                    Join a family
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Type a family invite code or scan its QR code.
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      aria-label="Family invite code"
+                      autoCapitalize="characters"
+                      className="h-11 rounded-lg px-3 uppercase"
+                      onChange={(event) =>
+                        setInviteCode(event.target.value.toUpperCase())
+                      }
+                      placeholder="Type or paste family code"
+                      required
+                      value={inviteCode}
+                    />
+                    <Button
+                      className="h-11 rounded-lg bg-primary text-primary-foreground hover:bg-primary/80"
+                      disabled={isSubmitting}
+                      type="submit"
+                    >
+                      Join family
+                    </Button>
+                  </div>
+                  <Button
+                    className="gap-2 rounded-lg"
+                    onClick={() => setScanningInvite((current) => !current)}
+                    type="button"
+                    variant="outline"
+                  >
+                    <Camera aria-hidden="true" className="size-4" />
+                    {scanningInvite ? "Close camera" : "Scan invite QR code"}
+                  </Button>
+                  {scanningInvite && (
+                    <InviteScanner
+                      onClose={() => setScanningInvite(false)}
+                      onScan={handleScannedInvite}
+                    />
+                  )}
+                </form>
+              )}
+            </div>
+          )}
+
+          {!activeFamily && (
             <p className="page-transition rounded-xl bg-white p-6 text-sm text-muted-foreground">
-              You haven&apos;t joined a family yet. Create one or use an invite
-              code to get started.
+              {isLoading
+                ? "Loading your families…"
+                : "You haven't joined a family yet. Create one or use an invite code to get started."}
             </p>
           )}
         </>
@@ -1387,10 +1826,6 @@ export function FamilyDashboard({
               </NavLink>
               <NavLink
                 className={() => navClass(view === "list")}
-                onClick={() => {
-                  setCategory("want")
-                  setPriceFilter("all")
-                }}
                 to="/profile/list"
               >
                 My list
@@ -1399,160 +1834,199 @@ export function FamilyDashboard({
           )}
           <div className="min-w-0 space-y-6">
             {view === "profile" && (
-              <form
-                className="grid gap-3 rounded-2xl bg-white p-5 shadow-lg sm:grid-cols-2"
-                onSubmit={saveProfile}
+              <Tabs
+                className="space-y-4 rounded-2xl bg-white p-5 shadow-lg"
+                defaultValue="details"
               >
-                <div className="sm:col-span-2">
+                <div>
                   <h2 className="text-xl font-bold text-lighter-black">
-                    Your profile
+                    Profile settings
                   </h2>
                   <p className="text-sm text-muted-foreground">
-                    Your birth year stays private; sharing an age label is
-                    optional.
+                    Manage your profile and personal appearance.
                   </p>
                 </div>
-                <fieldset className="personal-theme-options space-y-2 sm:col-span-2">
-                  <legend className="text-sm font-semibold text-lighter-black">
-                    Your app theme
-                  </legend>
-                  <p className="text-sm text-muted-foreground">
-                    Saved to your account. The family tree theme stays shared.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {appThemes.map((theme) => (
-                      <button
-                        aria-pressed={appTheme === theme.value}
-                        className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold text-lighter-black transition disabled:opacity-60 ${appTheme === theme.value ? "border-accent-red ring-2 ring-accent-red/30" : "border-border"}`}
-                        disabled={isLoading || isSavingTheme}
-                        key={theme.value}
-                        onClick={() => void updateAppTheme(theme.value)}
-                        type="button"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="size-4 rounded-full border border-black/20"
-                          style={{ backgroundColor: theme.color }}
-                        />
-                        {theme.label}
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
-                <Input
-                  aria-label="Display name"
-                  className="h-11 rounded-lg px-3"
-                  maxLength={80}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  placeholder="Display name"
-                  required
-                  value={displayName}
-                />
-                <Input
-                  aria-label="Birth year"
-                  className="h-11 rounded-lg px-3"
-                  max={new Date().getFullYear()}
-                  min={1900}
-                  onChange={(event) => setBirthYear(event.target.value)}
-                  placeholder="Birth year (optional)"
-                  type="number"
-                  value={birthYear}
-                />
-                <Input
-                  aria-label="Favorite items"
-                  className="h-11 rounded-lg px-3"
-                  onChange={(event) => setFavoriteItems(event.target.value)}
-                  placeholder="Favorite items (comma separated)"
-                  value={favoriteItems}
-                />
-                <Input
-                  aria-label="Things you like"
-                  className="h-11 rounded-lg px-3"
-                  onChange={(event) => setThingsTheyLike(event.target.value)}
-                  placeholder="Things you like (comma separated)"
-                  value={thingsTheyLike}
-                />
-                <div className="space-y-2 sm:col-span-2">
-                  <p className="text-sm font-semibold text-lighter-black">
-                    Your ornament
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {(Object.keys(ORNAMENT_ICONS) as AvatarIcon[]).map(
-                      (key) => {
-                        const Icon = ORNAMENT_ICONS[key]
-                        return (
-                          <button
-                            aria-label={`Ornament icon ${key}`}
-                            aria-pressed={avatarIcon === key}
-                            className={`flex size-10 items-center justify-center rounded-lg border ${avatarIcon === key ? "border-accent-red ring-2 ring-accent-red/30" : "border-border"}`}
-                            key={key}
-                            onClick={() => setAvatarIcon(key)}
-                            style={{ backgroundColor: avatarColor }}
-                            type="button"
-                          >
-                            <Icon
-                              aria-hidden="true"
-                              className="size-5 text-white"
-                            />
-                          </button>
-                        )
-                      }
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {ORNAMENT_COLORS.map((color) => (
-                      <button
-                        aria-label={`Ornament color ${color}`}
-                        aria-pressed={avatarColor === color}
-                        className={`size-8 rounded-full border-2 ${avatarColor === color ? "border-lighter-black" : "border-white shadow"}`}
-                        key={color}
-                        onClick={() => setAvatarColor(color)}
-                        style={{ backgroundColor: color }}
-                        type="button"
-                      />
-                    ))}
-                  </div>
-                  <Button
-                    className="gap-2 rounded-lg"
-                    disabled
-                    title="Photo upload is coming soon"
-                    type="button"
-                    variant="outline"
-                  >
-                    <ImagePlus aria-hidden="true" className="size-4" />
-                    Use my photo (coming soon)
-                  </Button>
-                </div>
-                <label className="flex items-center gap-2 text-sm text-lighter-black sm:col-span-2">
-                  <input
-                    checked={shareAge}
-                    onChange={(event) => setShareAge(event.target.checked)}
-                    type="checkbox"
-                  />
-                  Share an approximate age with family members
-                </label>
-                <Button
-                  className="w-fit rounded-lg"
-                  disabled={isSubmitting}
-                  type="submit"
-                  variant="outline"
+                <TabsList
+                  aria-label="Profile settings"
+                  className="h-auto rounded-lg p-1"
                 >
-                  Save profile
-                </Button>
-              </form>
+                  <TabsTrigger
+                    className="rounded-md px-3 py-2 text-sm"
+                    value="details"
+                  >
+                    Profile details
+                  </TabsTrigger>
+                  <TabsTrigger
+                    className="rounded-md px-3 py-2 text-sm"
+                    value="appearance"
+                  >
+                    Appearance
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="details">
+                  <form
+                    className="grid gap-3 sm:grid-cols-2"
+                    onSubmit={saveProfile}
+                  >
+                    <p className="text-sm text-muted-foreground sm:col-span-2">
+                      Your birth year stays private; sharing an age label is
+                      optional.
+                    </p>
+                    <Input
+                      aria-label="Display name"
+                      className="h-11 rounded-lg px-3"
+                      maxLength={80}
+                      onChange={(event) => setDisplayName(event.target.value)}
+                      placeholder="Display name"
+                      required
+                      value={displayName}
+                    />
+                    <Input
+                      aria-label="Birth year"
+                      className="h-11 rounded-lg px-3"
+                      max={new Date().getFullYear()}
+                      min={1900}
+                      onChange={(event) => setBirthYear(event.target.value)}
+                      placeholder="Birth year (optional)"
+                      type="number"
+                      value={birthYear}
+                    />
+                    <Input
+                      aria-label="Favorite items"
+                      className="h-11 rounded-lg px-3"
+                      onChange={(event) => setFavoriteItems(event.target.value)}
+                      placeholder="Favorite items (comma separated)"
+                      value={favoriteItems}
+                    />
+                    <Input
+                      aria-label="Things you like"
+                      className="h-11 rounded-lg px-3"
+                      onChange={(event) =>
+                        setThingsTheyLike(event.target.value)
+                      }
+                      placeholder="Things you like (comma separated)"
+                      value={thingsTheyLike}
+                    />
+                    <div className="space-y-2 sm:col-span-2">
+                      <p className="text-sm font-semibold text-lighter-black">
+                        Your ornament
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {(Object.keys(ORNAMENT_ICONS) as AvatarIcon[]).map(
+                          (key) => {
+                            const Icon = ORNAMENT_ICONS[key]
+                            return (
+                              <button
+                                aria-label={`Ornament icon ${key}`}
+                                aria-pressed={avatarIcon === key}
+                                className={`flex size-10 items-center justify-center rounded-lg border ${avatarIcon === key ? "border-accent-red ring-2 ring-accent-red/30" : "border-border"}`}
+                                key={key}
+                                onClick={() => setAvatarIcon(key)}
+                                style={{ backgroundColor: avatarColor }}
+                                type="button"
+                              >
+                                <Icon
+                                  aria-hidden="true"
+                                  className="size-5 text-white"
+                                />
+                              </button>
+                            )
+                          }
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {ORNAMENT_COLORS.map((color) => (
+                          <button
+                            aria-label={`Ornament color ${color}`}
+                            aria-pressed={avatarColor === color}
+                            className={`size-8 rounded-full border-2 ${avatarColor === color ? "border-lighter-black" : "border-white shadow"}`}
+                            key={color}
+                            onClick={() => setAvatarColor(color)}
+                            style={{ backgroundColor: color }}
+                            type="button"
+                          />
+                        ))}
+                      </div>
+                      <Button
+                        className="gap-2 rounded-lg"
+                        disabled
+                        title="Photo upload is coming soon"
+                        type="button"
+                        variant="outline"
+                      >
+                        <ImagePlus aria-hidden="true" className="size-4" />
+                        Use my photo (coming soon)
+                      </Button>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm text-lighter-black sm:col-span-2">
+                      <input
+                        checked={shareAge}
+                        onChange={(event) => setShareAge(event.target.checked)}
+                        type="checkbox"
+                      />
+                      Share an approximate age with family members
+                    </label>
+                    <Button
+                      className="w-fit rounded-lg"
+                      disabled={isSubmitting}
+                      type="submit"
+                      variant="outline"
+                    >
+                      Save profile
+                    </Button>
+                  </form>
+                </TabsContent>
+                <TabsContent value="appearance">
+                  <fieldset className="personal-theme-options space-y-3">
+                    <legend className="text-sm font-semibold text-lighter-black">
+                      Your app theme
+                    </legend>
+                    <p className="text-sm text-muted-foreground">
+                      Saved to your account and applied only to your view. The
+                      Tree page always uses the selected family&apos;s theme.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {appThemes.map((theme) => (
+                        <button
+                          aria-pressed={appTheme === theme.value}
+                          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold text-lighter-black transition disabled:opacity-60 ${appTheme === theme.value ? "border-accent-red ring-2 ring-accent-red/30" : "border-border"}`}
+                          disabled={isLoading || isSavingTheme}
+                          key={theme.value}
+                          onClick={() => void updateAppTheme(theme.value)}
+                          type="button"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="size-4 rounded-full border border-black/20"
+                            style={{ backgroundColor: theme.color }}
+                          />
+                          {theme.label}
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                </TabsContent>
+              </Tabs>
             )}
             {view === "list" && activeFamily && (
               <section className="space-y-5 rounded-2xl bg-white p-5 shadow-lg sm:p-8">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
                   <div>
                     <p className="font-mono text-xs tracking-[0.18em] text-accent-red uppercase">
-                      {selectedMember?.display_name ?? "Family"} ·{" "}
-                      {activeFamily.year}
+                      {selectedChild?.display_name ??
+                        selectedMember?.display_name ??
+                        "Family"}{" "}
+                      · {activeFamily.year}
                     </p>
                     <h2 className="text-2xl font-bold text-lighter-black">
                       Wish list
                     </h2>
-                    {selectedMember && (
+                    {selectedChild && selectedMember && (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Child of {selectedMember.display_name}
+                      </p>
+                    )}
+                    {!selectedChild && selectedMember && (
                       <p className="mt-1 text-sm text-muted-foreground">
                         {selectedMember.favorite_items.length > 0 &&
                           `Favorites: ${selectedMember.favorite_items.join(", ")}`}
@@ -1572,301 +2046,30 @@ export function FamilyDashboard({
                   )}
                 </div>
 
-                {listOwnerId === user.id && (
-                  <form
-                    className="grid gap-3 rounded-xl bg-[#f8f8f8] p-4 sm:grid-cols-2 lg:grid-cols-5"
-                    onSubmit={addGift}
-                  >
-                    <Input
-                      aria-label="Gift title"
-                      className="h-11 rounded-lg bg-white px-3"
-                      maxLength={120}
-                      onChange={(event) =>
-                        setGiftForm((current) => ({
-                          ...current,
-                          title: event.target.value,
-                        }))
-                      }
-                      placeholder="Gift name (optional with a link)"
-                      value={giftForm.title}
-                    />
-                    <select
-                      aria-label="Gift category"
-                      className="h-11 rounded-lg border border-border bg-white px-3 text-sm"
-                      onChange={(event) =>
-                        setGiftForm((current) => ({
-                          ...current,
-                          category: event.target.value as GiftCategory,
-                        }))
-                      }
-                      value={giftForm.category}
-                    >
-                      {categories.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <Input
-                      aria-label="Gift price in dollars"
-                      className="h-11 rounded-lg bg-white px-3"
-                      min="0"
-                      onChange={(event) =>
-                        setGiftForm((current) => ({
-                          ...current,
-                          price: event.target.value,
-                        }))
-                      }
-                      placeholder="Price ($)"
-                      step="0.01"
-                      type="number"
-                      value={giftForm.price}
-                    />
-                    <Input
-                      aria-label="Product link"
-                      className="h-11 rounded-lg bg-white px-3"
-                      onChange={(event) =>
-                        setGiftForm((current) => ({
-                          ...current,
-                          url: event.target.value,
-                        }))
-                      }
-                      placeholder="Product link"
-                      type="url"
-                      value={giftForm.url}
-                    />
-                    <Input
-                      aria-label="Gift note"
-                      className="h-11 rounded-lg bg-white px-3"
-                      onChange={(event) =>
-                        setGiftForm((current) => ({
-                          ...current,
-                          notes: event.target.value,
-                        }))
-                      }
-                      placeholder="Optional note"
-                      value={giftForm.notes}
-                    />
-                    <Button
-                      className="rounded-lg bg-accent-red text-white hover:bg-[#a81e2d]"
-                      disabled={isSubmitting}
-                      type="submit"
-                    >
-                      <Plus aria-hidden="true" className="mr-2 size-4" />
-                      Add gift
-                    </Button>
-                    <Button
-                      className="rounded-lg"
-                      disabled={isSubmitting}
-                      onClick={() => void importOriginalList()}
-                      type="button"
-                      variant="outline"
-                    >
-                      Import original list
-                    </Button>
-                  </form>
-                )}
-
-                <div className="flex flex-wrap gap-2">
-                  {categories.map((option) => (
-                    <button
-                      className={navClass(category === option.value)}
-                      key={option.value}
-                      onClick={() => setCategory(option.value)}
-                      type="button"
-                    >
-                      {option.label} (
-                      {
-                        details.gifts.filter(
-                          (gift) =>
-                            gift.owner_id === listOwnerId &&
-                            gift.category === option.value
-                        ).length
-                      }
-                      )
-                    </button>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {priceFilters.map((option) => (
-                    <button
-                      className={`${navClass(priceFilter === option.value)} border border-border`}
-                      key={option.value}
-                      onClick={() => setPriceFilter(option.value)}
-                      type="button"
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-
-                {visibleGifts.length === 0 ? (
-                  <p className="rounded-xl bg-[#f8f8f8] p-6 text-sm text-muted-foreground">
-                    No gifts in this category and price range yet.
+                {childId && !selectedChild ? (
+                  <p className="text-sm text-muted-foreground">
+                    {detailsFamilyId !== activeFamily.id
+                      ? "Loading child profile…"
+                      : "This child profile is not available in this family."}
                   </p>
                 ) : (
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {visibleGifts.map((gift) => {
-                      const claim = claimsByGift.get(gift.id)
-                      const teamUp = teamUpByGift.get(gift.id)
-                      const isOwner = gift.owner_id === user.id
-                      return (
-                        <article
-                          className="space-y-3 rounded-xl border border-border bg-white p-4 shadow-sm"
-                          key={gift.id}
-                        >
-                          {gift.image_url && (
-                            <img
-                              alt=""
-                              className="h-40 w-full rounded-lg object-cover"
-                              src={gift.image_url}
-                            />
-                          )}
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              {editingGiftId === gift.id ? (
-                                <form
-                                  className="flex gap-1"
-                                  onSubmit={(event) => {
-                                    event.preventDefault()
-                                    void renameGift(gift.id)
-                                  }}
-                                >
-                                  <Input
-                                    aria-label="Gift name"
-                                    autoFocus
-                                    className="h-8 rounded-lg px-2 text-sm"
-                                    maxLength={120}
-                                    onChange={(event) =>
-                                      setEditTitle(event.target.value)
-                                    }
-                                    value={editTitle}
-                                  />
-                                  <Button size="sm" type="submit">
-                                    Save
-                                  </Button>
-                                </form>
-                              ) : (
-                                <h3 className="flex items-center gap-1 font-semibold text-lighter-black">
-                                  {gift.title}
-                                  {isOwner && (
-                                    <button
-                                      aria-label={`Rename ${gift.title}`}
-                                      className="text-muted-foreground hover:text-lighter-black"
-                                      onClick={() => {
-                                        setEditingGiftId(gift.id)
-                                        setEditTitle(gift.title)
-                                      }}
-                                      type="button"
-                                    >
-                                      <Pencil
-                                        aria-hidden="true"
-                                        className="size-3"
-                                      />
-                                    </button>
-                                  )}
-                                </h3>
-                              )}
-                              {gift.store && (
-                                <p className="text-xs text-muted-foreground">
-                                  {gift.store}
-                                </p>
-                              )}
-                            </div>
-                            {gift.price !== null && (
-                              <span className="shrink-0 rounded-full bg-[#fff3d4] px-3 py-1 text-sm font-bold text-lighter-black">
-                                ${Number(gift.price).toFixed(2)}
-                              </span>
-                            )}
-                          </div>
-                          {gift.notes && (
-                            <p className="text-sm text-muted-foreground">
-                              {gift.notes}
-                            </p>
-                          )}
-                          {gift.url && (
-                            <a
-                              className="inline-flex items-center gap-1 text-sm font-semibold text-accent-red underline-offset-4 hover:underline"
-                              href={gift.url}
-                              rel="noreferrer"
-                              target="_blank"
-                            >
-                              View gift{" "}
-                              <ExternalLink
-                                aria-hidden="true"
-                                className="size-3"
-                              />
-                            </a>
-                          )}
-                          {isOwner ? (
-                            <Button
-                              aria-label={`Remove ${gift.title}`}
-                              className="w-full rounded-lg"
-                              disabled={pendingId === gift.id}
-                              onClick={() => void deleteGift(gift.id)}
-                              variant="outline"
-                            >
-                              <Trash2
-                                aria-hidden="true"
-                                className="mr-2 size-4"
-                              />
-                              Remove from my list
-                            </Button>
-                          ) : claim ? (
-                            claim.claimed_by === user.id ? (
-                              <Button
-                                className="w-full rounded-lg"
-                                disabled={pendingId === gift.id}
-                                onClick={() => void releaseClaim(gift.id)}
-                                variant="outline"
-                              >
-                                <Check
-                                  aria-hidden="true"
-                                  className="mr-2 size-4"
-                                />
-                                You&apos;re getting this · Undo
-                              </Button>
-                            ) : (
-                              <p className="rounded-lg bg-[#f3f3f3] px-3 py-2 text-center text-sm text-muted-foreground">
-                                Already taken
-                              </p>
-                            )
-                          ) : teamUp ? (
-                            <NavLink
-                              className="block rounded-lg bg-[#f3f8f4] p-3 text-center text-sm font-semibold text-lighter-black"
-                              to="/team-ups"
-                            >
-                              {teamUp.status === "funded"
-                                ? "Purchased by a team-up"
-                                : "Team-up in progress"}{" "}
-                              · Open Team-ups
-                            </NavLink>
-                          ) : (
-                            <div className="flex gap-2">
-                              <Button
-                                className="flex-1 rounded-lg bg-accent-red text-white hover:bg-[#a81e2d]"
-                                disabled={pendingId === gift.id}
-                                onClick={() => void claimGift(gift.id)}
-                              >
-                                I&apos;ll get this
-                              </Button>
-                              {gift.price !== null && gift.price >= 60 && (
-                                <Button
-                                  aria-label={`Start a team-up for ${gift.title}`}
-                                  className="rounded-lg"
-                                  disabled={pendingId === gift.id}
-                                  onClick={() => void createTeamUp(gift.id)}
-                                  variant="outline"
-                                >
-                                  Team up
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                        </article>
-                      )
-                    })}
-                  </div>
+                  <WishList
+                    key={`${activeFamily.id}:${listOwnerId}:${childId ?? ""}`}
+                    client={client}
+                    familyId={activeFamily.id}
+                    ownerId={listOwnerId}
+                    childId={childId ?? null}
+                    userId={user.id}
+                    lists={details.lists}
+                    gifts={details.gifts}
+                    claims={details.claims}
+                    teamUps={details.teamUps}
+                    pendingId={pendingId}
+                    refresh={() => refreshDetails(activeFamily.id)}
+                    claimGift={claimGift}
+                    releaseClaim={releaseClaim}
+                    createTeamUp={createTeamUp}
+                  />
                 )}
                 <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
                   <Gift
@@ -1895,7 +2098,7 @@ export function FamilyDashboard({
             </div>
           </div>
           {myTeamUps.length === 0 ? (
-            <p className="rounded-xl bg-[#f8f8f8] p-5 text-sm text-muted-foreground">
+            <p className="rounded-xl bg-muted p-5 text-sm text-muted-foreground">
               No team-ups yet. You'll see one here when someone invites you.
             </p>
           ) : (
@@ -1910,6 +2113,12 @@ export function FamilyDashboard({
                 )
                 const nameOf = (id: string) =>
                   memberById.get(id)?.display_name ?? "Family member"
+                const list = details.lists.find(
+                  (item) => item.id === gift.list_id
+                )
+                const child = details.children.find(
+                  (item) => item.id === list?.child_id
+                )
                 const confirmed = rows.filter((row) => row.confirmed_at)
                 const pending = rows.filter((row) => !row.confirmed_at)
                 const myRow = rows.find((row) => row.user_id === user.id)
@@ -1928,11 +2137,12 @@ export function FamilyDashboard({
                       <div>
                         <h3 className="font-semibold">{gift.title}</h3>
                         <p className="text-sm text-muted-foreground">
-                          Wanted by {nameOf(gift.owner_id)} · {confirmed.length}{" "}
-                          confirmed
+                          Wanted by{" "}
+                          {child?.display_name ?? nameOf(gift.owner_id)} ·{" "}
+                          {confirmed.length} confirmed
                         </p>
                       </div>
-                      <span className="rounded-full bg-[#fff3d4] px-3 py-1 text-sm font-semibold">
+                      <span className="rounded-full bg-muted px-3 py-1 text-sm font-semibold">
                         {teamUp.status === "funded"
                           ? "Purchased"
                           : isConfirmed
@@ -1950,7 +2160,7 @@ export function FamilyDashboard({
                     </p>
                     {teamUp.status === "open" && !isConfirmed && (
                       <Button
-                        className="w-full rounded-lg bg-accent-red text-white hover:bg-[#a81e2d]"
+                        className="w-full rounded-lg bg-primary text-primary-foreground hover:bg-primary/80"
                         disabled={pendingId === teamUp.id}
                         onClick={() => void confirmTeamUp(teamUp.id)}
                       >

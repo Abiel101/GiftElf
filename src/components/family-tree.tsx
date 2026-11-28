@@ -1,19 +1,20 @@
 import { Star } from "lucide-react"
 
-import type { AvatarIcon, TreeTheme } from "@/lib/database.types"
-import { ORNAMENT_ICONS, TREE_THEMES } from "@/lib/tree-theme"
+import type { AppTheme, AvatarIcon } from "@/lib/database.types"
+import { ORNAMENT_ICONS, PERSONAL_TREE_THEMES } from "@/lib/tree-theme"
 
 export type TreeMember = {
   id: string
   display_name: string
   avatar_color: string
   avatar_icon: AvatarIcon
+  parentName?: string
 }
 
 type FamilyTreeProps = {
   members: TreeMember[]
   currentUserId: string
-  theme?: TreeTheme
+  theme?: Exclude<AppTheme, "family">
   onSelect: (memberId: string) => void
 }
 
@@ -38,7 +39,7 @@ export function FamilyTree({
   theme = "classic",
   onSelect,
 }: FamilyTreeProps) {
-  const palette = TREE_THEMES[theme]
+  const palette = PERSONAL_TREE_THEMES[theme]
   const rows = layoutRows(members.length)
   const top = 24
   const bottom = 86
@@ -89,7 +90,7 @@ export function FamilyTree({
           const x = 50 + ((column + 1) / (rowSize + 1) - 0.5) * 2 * halfWidth
           return (
             <button
-              aria-label={`${member.display_name}'s wish list`}
+              aria-label={`${member.display_name}'s wish list${member.parentName ? `, child of ${member.parentName}` : ""}`}
               className="family-ornament absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
               key={member.id}
               onClick={() => onSelect(member.id)}
@@ -108,6 +109,11 @@ export function FamilyTree({
               <span className="family-ornament-name max-w-24 truncate">
                 {member.id === currentUserId ? "You" : member.display_name}
               </span>
+              {member.parentName && (
+                <span className="family-ornament-name max-w-24 truncate">
+                  Child of {member.parentName}
+                </span>
+              )}
             </button>
           )
         })

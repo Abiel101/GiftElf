@@ -79,8 +79,6 @@ export type Database = {
           id: string
           name: string
           year: number
-          invite_code: string
-          invite_code_expires_at: string
           tree_theme: TreeTheme
           created_by: string
           created_at: string
@@ -89,11 +87,21 @@ export type Database = {
           id?: string
           name: string
           year: number
-          invite_code?: string
-          invite_code_expires_at: string
           tree_theme?: TreeTheme
           created_by: string
           created_at?: string
+        }
+      >
+      family_invite_secrets: Table<
+        {
+          family_id: string
+          invite_code: string
+          invite_code_expires_at: string
+        },
+        {
+          family_id: string
+          invite_code: string
+          invite_code_expires_at: string
         }
       >
       family_members: Table<
@@ -134,9 +142,44 @@ export type Database = {
         { invite_id: string; family_id: string; email: string },
         { invite_id: string; family_id: string; email: string }
       >
+      family_children: Table<
+        {
+          id: string
+          family_id: string
+          parent_id: string
+          display_name: string
+          created_at: string
+        },
+        {
+          id?: string
+          family_id: string
+          parent_id: string
+          display_name: string
+          created_at?: string
+        }
+      >
+      wish_lists: Table<
+        {
+          id: string
+          family_id: string
+          owner_id: string
+          child_id: string | null
+          name: string
+          created_at: string
+        },
+        {
+          id?: string
+          family_id: string
+          owner_id: string
+          child_id?: string | null
+          name: string
+          created_at?: string
+        }
+      >
       gifts: Table<
         {
           id: string
+          list_id: string
           family_id: string
           owner_id: string
           title: string
@@ -150,6 +193,7 @@ export type Database = {
         },
         {
           id?: string
+          list_id: string
           family_id: string
           owner_id: string
           title: string
@@ -273,6 +317,10 @@ export type Database = {
       release_gift_claim: { Args: { p_gift_id: string }; Returns: undefined }
       regenerate_family_invite: {
         Args: { p_family_id: string }
+        Returns: string
+      }
+      set_family_invite_expiry: {
+        Args: { p_family_id: string; p_expires_on: string }
         Returns: string
       }
     }
