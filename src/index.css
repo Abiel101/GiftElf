@@ -269,6 +269,80 @@ body:has(.intro-overlay) {
   );
 }
 
+.app-background {
+  --app-from: #e94753;
+  --app-via: #cf3342;
+  --app-to: #a82035;
+  --app-fg: #ffffff;
+  background: linear-gradient(
+    to bottom,
+    var(--app-from) 0%,
+    var(--app-via) 58%,
+    var(--app-to) 100%
+  );
+  background-attachment: fixed;
+  color: var(--app-fg);
+  transition: background-color 0.3s;
+}
+
+html[data-tree-theme="tokyo-night"] .app-background {
+  --app-from: #24283b;
+  --app-via: #1a1b26;
+  --app-to: #16161e;
+  --app-fg: #c0caf5;
+}
+
+html[data-tree-theme="mist"] .app-background {
+  --app-from: #f4f8fa;
+  --app-via: #dbe7eb;
+  --app-to: #b8cfd6;
+  --app-fg: #222222;
+}
+
+html[data-tree-theme="amber"] .app-background {
+  --app-from: #fff6e6;
+  --app-via: #ffe3ac;
+  --app-to: #f5b73b;
+  --app-fg: #222222;
+}
+
+.app-nav-link {
+  background: rgba(255, 255, 255, 0.92);
+  color: #222222;
+}
+
+.app-nav-link.is-active {
+  background: #fb4d54;
+  color: #ffffff;
+}
+
+@media (max-width: 639px) {
+  .app-nav {
+    position: fixed;
+    inset: auto 0.75rem calc(0.75rem + env(safe-area-inset-bottom)) 0.75rem;
+    z-index: 40;
+    display: flex;
+    justify-content: space-around;
+    gap: 0.25rem;
+    padding: 0.35rem;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(14px);
+  }
+
+  .app-nav .app-nav-link {
+    flex: 1;
+    padding: 0.6rem 0.5rem;
+    text-align: center;
+    background: transparent;
+  }
+
+  .app-nav .app-nav-link.is-active {
+    background: #fb4d54;
+  }
+}
+
 .auth-flip-card {
   perspective: 1400px;
 }
@@ -515,6 +589,7 @@ body:has(.intro-overlay) {
 
 .family-ornament-name {
   background: #fff;
+  max-width: 5rem;
   border: 2px solid #1c2b24;
   padding: 0 0.35rem;
   font-family: ui-monospace, monospace;
